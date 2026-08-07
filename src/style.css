@@ -1,0 +1,143 @@
+/* Rhythm11 — chrome only. Everything in the play area is drawn on canvas. */
+
+:root {
+  --ink:   #17131f;
+  --paper: #fdf6e3;
+  --pop:   #ff5c7a;
+  --pop2:  #ffd23f;
+  --cool:  #3ddad7;
+  --deep:  #2a2140;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--deep);
+  overflow: hidden;
+  font-family: "Trebuchet MS", "Verdana", system-ui, sans-serif;
+  color: var(--paper);
+  /* Kill mobile tap delay + selection flashes; both are latency/feel killers. */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 90% at 50% 0%, #3b2f5c 0%, #1d1730 60%, #120e1f 100%);
+}
+
+#game {
+  display: block;
+  image-rendering: auto;
+  /* Sized in JS to preserve 16:9 and hit device pixel ratio exactly. */
+}
+
+/* DOM UI is deliberately minimal: only menus/overlays, never gameplay.
+   Gameplay must not depend on DOM layout or CSS transitions — those are
+   scheduled by the compositor, not the audio clock, and will drift. */
+#ui {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+#ui > * { pointer-events: auto; }
+
+.panel {
+  background: rgba(23, 19, 31, 0.92);
+  border: 3px solid var(--paper);
+  border-radius: 18px;
+  padding: 28px 34px;
+  box-shadow: 0 14px 0 rgba(0, 0, 0, 0.35);
+  max-width: min(760px, 88vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.panel h1 {
+  font-size: clamp(30px, 5.5vw, 54px);
+  letter-spacing: 2px;
+  color: var(--pop2);
+  text-shadow: 0 4px 0 var(--pop);
+  margin-bottom: 6px;
+}
+
+.panel h2 { font-size: 22px; margin-bottom: 14px; color: var(--cool); }
+.panel p  { font-size: 15px; line-height: 1.55; opacity: 0.85; margin-bottom: 14px; }
+
+.levels { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 18px 0; }
+
+.level-card {
+  width: 210px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(253, 246, 227, 0.35);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 90ms ease, border-color 90ms ease, background 90ms ease;
+  font: inherit;
+  color: inherit;
+}
+.level-card:hover, .level-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--pop2);
+  background: rgba(255, 210, 63, 0.12);
+  outline: none;
+}
+.level-card .name  { font-size: 18px; font-weight: bold; color: var(--pop2); }
+.level-card .diff  { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; margin: 4px 0 8px; }
+.level-card .blurb { font-size: 12.5px; opacity: 0.75; line-height: 1.4; }
+.d-easy   { color: var(--cool); }
+.d-medium { color: var(--pop2); }
+.d-hard   { color: var(--pop); }
+
+.btn {
+  font: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: var(--pop2);
+  border: none;
+  border-radius: 999px;
+  padding: 12px 26px;
+  margin: 6px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #c9a01f;
+  transition: transform 70ms ease, box-shadow 70ms ease;
+}
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #c9a01f; }
+.btn.ghost {
+  background: transparent;
+  color: var(--paper);
+  border: 2px solid rgba(253, 246, 227, 0.5);
+  box-shadow: none;
+}
+
+.hint { font-size: 12.5px; opacity: 0.6; margin-top: 12px; line-height: 1.6; }
+kbd {
+  background: rgba(253, 246, 227, 0.15);
+  border: 1px solid rgba(253, 246, 227, 0.4);
+  border-radius: 5px;
+  padding: 1px 7px;
+  font-family: inherit;
+  font-size: 0.92em;
+}
+
+.stat-row { display: flex; justify-content: space-between; font-size: 15px; padding: 5px 0; }
+.stat-row .k { opacity: 0.7; }
+.stat-row .v { font-weight: bold; }
+
+.slider-row { display: flex; align-items: center; gap: 12px; margin: 10px 0; font-size: 14px; }
+.slider-row input[type=range] { flex: 1; accent-color: var(--pop2); }

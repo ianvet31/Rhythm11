@@ -1,0 +1,15 @@
+{
+  "name": "rhythm11",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A browser rhythm game about hitting things exactly on time. Animals, retro vector art, synthesized music.",
+  "license": "MIT",
+  "scripts": {
+    "start": "npx --yes serve -l 3000 .",
+    "check": "node tools/check.mjs",
+    "smoke": "node tools/smoke.mjs",
+    "build": "node tools/build.mjs",
+    "test": "node tools/check.mjs && node tools/smoke.mjs"
+  }
+}
