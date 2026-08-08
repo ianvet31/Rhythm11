@@ -403,6 +403,117 @@ export const Voices = {
     n.stop(t + dur + 0.1);
   },
 
+  /**
+   * A sung vowel.
+   *
+   * Real voices are a buzzy source shaped by resonances (formants) whose
+   * frequencies are what your ear decodes as "ah" or "oo" — and, critically,
+   * those resonances stay put when the pitch changes. So this is a sawtooth
+   * through two fixed bandpass filters, not a filter that tracks the note. Let
+   * the formants follow the pitch and it stops sounding like a voice and starts
+   * sounding like a synth pad.
+   *
+   * The pitch scoop into the note is the other half: singers approach a note
+   * from below. A ~40ms scoop is the difference between "sung" and "beeped".
+   */
+  sing(bus, t, { note = 'C4', gain = 0.26, dur = 0.4, vowel = 'ah', scoop = 0.45, vib = 14 } = {}) {
+    const ctx = bus.ctx;
+    const f = noteToFreq(note);
+    const FORMANTS = {
+      ah: [730, 1090], ee: [270, 2290], oo: [300, 870], oh: [570, 840],
+    }[vowel] || [730, 1090];
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(f * Math.pow(2, -scoop / 12), t);
+    osc.frequency.exponentialRampToValueAtTime(f, t + 0.045);
+
+    if (vib > 0) {
+      const lfo = ctx.createOscillator();
+      const lg = ctx.createGain();
+      lfo.frequency.value = 5.2;
+      lg.gain.value = vib;
+      // Vibrato fades IN — singers don't start a note with wobble on it.
+      lg.gain.setValueAtTime(0, t);
+      lg.gain.linearRampToValueAtTime(vib, t + dur * 0.55);
+      lfo.connect(lg).connect(osc.detune);
+      lfo.start(t); lfo.stop(t + dur + 0.1);
+    }
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(gain, t + 0.03);
+    env.gain.setValueAtTime(gain, t + dur * 0.72);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+
+    const sum = ctx.createGain();
+    sum.gain.value = 0.5;
+    for (const [i, ff] of FORMANTS.entries()) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = ff;
+      bp.Q.value = 7 - i * 2;
+      const g = ctx.createGain();
+      g.gain.value = i === 0 ? 1 : 0.55;
+      osc.connect(bp).connect(g).connect(sum);
+    }
+    // A little dry signal keeps the fundamental audible on small speakers.
+    const dry = ctx.createGain();
+    dry.gain.value = 0.18;
+    osc.connect(dry).connect(sum);
+
+    sum.connect(env).connect(bus.music);
+    env.connect(bus.reverbSend);
+    osc.start(t);
+    osc.stop(t + dur + 0.15);
+  },
+
+  /** A sour, deflating croak. The sound of a sprout getting it wrong. */
+  croak(bus, t, { gain = 0.22, note = 'C3' } = {}) {
+    const ctx = bus.ctx;
+    const f = noteToFreq(note);
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    const lp = ctx.createBiquadFilter();
+    o.type = 'square';
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 0.26);
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(1400, t);
+    lp.frequency.exponentialRampToValueAtTime(320, t + 0.26);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(lp).connect(g).connect(bus.music);
+    o.start(t);
+    o.stop(t + 0.36);
+  },
+
+  /**
+   * The courier's incoming whistle.
+   *
+   * This is a TELEGRAPH: it sounds a fixed interval before a parcel arrives and
+   * its pitch sweep is always identical, so the player can learn "whistle →
+   * one beat → catch" as a single unit. Everything visual about that parcel is
+   * randomised; this sound is the only honest thing in the level.
+   */
+  whistle(bus, t, { dur = 0.5, gain = 0.2, from = 500, to = 1500 } = {}) {
+    const ctx = bus.ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(from, t);
+    o.frequency.exponentialRampToValueAtTime(to, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+    g.gain.setValueAtTime(gain * 0.9, t + dur * 0.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.03);
+    o.connect(g).connect(bus.music);
+    g.connect(bus.reverbSend);
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  },
+
   /* ── Feedback SFX ──────────────────────────────────────────────────────── */
 
   /**

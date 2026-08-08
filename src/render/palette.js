@@ -1,68 +1,98 @@
 /**
  * Palettes — small, deliberate, per-world.
  *
- * Each palette is capped at roughly eight usable colours. That constraint is
- * what makes flat vector art read as "designed" rather than "assembled": with a
+ * Each palette is capped at roughly ten usable colours. That constraint is what
+ * makes flat vector art read as "designed" rather than "assembled": with a
  * limited set you're forced to reuse hues across unrelated objects, which is
- * exactly what makes a screen-printed poster feel cohesive.
+ * what makes a screen-printed poster feel cohesive.
  *
- * Every palette must satisfy one gameplay rule: `hot` and `cue` are reserved for
- * things the player must react to, and appear nowhere in the background. If a
- * cue colour also shows up in a bush, the player's eye has to do extra work at
- * exactly the moment it can't afford to.
+ * One gameplay rule every palette obeys: `callColor` is reserved for the game
+ * TELLING you something — the crow's caw rings, the choirmaster's phrase, the
+ * courier's whistle. It appears nowhere in the scenery. When that colour flashes
+ * it always means "listen", and it never means anything else.
  */
 
 export const PALETTES = {
-  savanna: {
-    name: 'Savanna Stomp',
-    skyTop: '#ffd9a0',
-    skyBot: '#ffb066',
-    sun: '#fff0c2',
-    far: '#d98c5f',
-    mid: '#c06a4a',
-    near: '#8f4a3c',
-    ground: '#e8a765',
-    groundDark: '#c9834b',
-    fur: '#e0a458',
-    furDark: '#c07f3c',
-    belly: '#ffe3b8',
-    hot: '#ff4d6d',      // cue objects
-    cue: '#ffd23f',       // judgment ring / active
+  /* ── Puddle Hop — a drizzly park at dusk ─────────────────────────────── */
+  park: {
+    name: 'Puddle Hop',
+    skyTop: '#8fb8d6',
+    skyBot: '#d9c3a8',
+    sun: '#fff0d0',
+    far: '#7d94ab',
+    mid: '#5f7186',
+    near: '#3f4c60',
+    ground: '#8a7a63',
+    groundDark: '#6b5c48',
+    stone: '#b9ae99',
+    stoneDark: '#8f8471',
+    post: '#6b4f36',
+    water: '#6fa8c9',
+    waterLight: '#a8d6ea',
+    rain: 'rgba(200,225,240,0.55)',
+    // Pip
+    body: '#ffd166',
+    trim: '#e8553f',
+    skin: '#ffe3c4',
+    hatColor: '#e8553f',
+    callColor: '#ffb03a',
+    cue: '#ffd166',
+    hot: '#e8553f',
     accent: '#4ec9a5',
   },
-  tidepool: {
-    name: 'Neon Tide Pool',
-    skyTop: '#1b2a5e',
-    skyBot: '#0d1235',
-    sun: '#7ae8ff',
-    far: '#233a7a',
-    mid: '#1a2c5e',
-    near: '#0f1c3d',
-    ground: '#2b4a8f',
-    groundDark: '#1b3060',
-    fur: '#b96ce8',
-    furDark: '#8a45c0',
-    belly: '#e8c7ff',
-    hot: '#00ffc8',
-    cue: '#ff5ce0',
-    accent: '#ffe14d',
+
+  /* ── Choir Sprout — a warm wooden hall ───────────────────────────────── */
+  hall: {
+    name: 'Choir Sprout',
+    skyTop: '#3c2a4d',
+    skyBot: '#241a33',
+    sun: '#ffd98a',
+    far: '#4a3560',
+    mid: '#3a2a4d',
+    near: '#2a1e39',
+    ground: '#6b4a35',
+    groundDark: '#4a3325',
+    wood: '#8a5c3d',
+    woodDark: '#5f3e29',
+    curtain: '#7d2a4a',
+    curtainDark: '#5a1c35',
+    // Sprouts
+    body: '#a8d84f',
+    trim: '#5aa832',
+    skin: '#f6e6c8',
+    leaf: '#7ed957',
+    masterBody: '#5b7fd4',
+    masterTrim: '#2f4fa8',
+    callColor: '#ffd98a',
+    cue: '#ffd98a',
+    hot: '#ff7ab5',
+    accent: '#7ed957',
   },
-  overdrive: {
-    name: 'Vulpine Overdrive',
-    skyTop: '#2a0a3d',
-    skyBot: '#0a0418',
+
+  /* ── Rocket Courier — a neon launchpad at night ──────────────────────── */
+  pad: {
+    name: 'Rocket Courier',
+    skyTop: '#1b0f3a',
+    skyBot: '#07040f',
     sun: '#ff2e88',
-    far: '#4a1160',
-    mid: '#2f0a44',
-    near: '#17052a',
-    ground: '#20073a',
-    groundDark: '#12041f',
-    fur: '#ff8c42',
-    furDark: '#d4571f',
-    belly: '#fff0d6',
-    hot: '#00e5ff',
-    cue: '#ffe14d',
-    accent: '#ff2e88',
+    far: '#2d1a5c',
+    mid: '#1d1140',
+    near: '#120a28',
+    ground: '#241645',
+    groundDark: '#150c2a',
+    metal: '#4a5570',
+    metalDark: '#2e3549',
+    // Courier
+    body: '#ff8c42',
+    trim: '#2b2f4a',
+    skin: '#ffddb8',
+    hatColor: '#00e5ff',
+    parcelA: '#ffd23f',
+    parcelB: '#ff5ce0',
+    callColor: '#00e5ff',
+    cue: '#ffd23f',
+    hot: '#ff2e88',
+    accent: '#00e5ff',
   },
 };
 
@@ -76,10 +106,19 @@ export const GRADE_COLOR = {
   holdend: '#4ec9a5',
 };
 
+/**
+ * Judgment labels.
+ *
+ * Rhythm Heaven famously shows almost nothing during play — no PERFECT/GREAT
+ * spam over the action. So only the extremes get a label: a perfect is worth
+ * celebrating and a miss needs acknowledging. Everything in between is
+ * communicated by sound and by how the character moves, which keeps the screen
+ * clear and keeps the player listening.
+ */
 export const GRADE_LABEL = {
-  perfect: 'PERFECT!',
-  great: 'GREAT',
-  good: 'ok',
-  miss: 'MISS',
+  perfect: 'NICE!',
+  great: null,
+  good: null,
+  miss: 'OOPS',
   holdbreak: 'LET GO!',
 };

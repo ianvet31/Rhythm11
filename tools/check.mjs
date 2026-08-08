@@ -125,6 +125,53 @@ for (const L of LEVELS) {
 
   const notes = L.chart();
   const music = L.music();
+  const cues = L.cues ? L.cues() : [];
+
+  /* ── THE TELEGRAPH RULE ──────────────────────────────────────────────────
+     The defining constraint of this game: with no note highway, a player can
+     only hit a note they were TOLD about. Every note therefore declares
+     `answers` — the beat of the call or telegraph it responds to — and that
+     call must
+
+       (a) actually exist as a sounded event in music(), and
+       (b) have sounded far enough in advance to be usable, and
+       (c) not be so far in advance that nobody could still remember it.
+
+     This is the rule that stops the game quietly drifting back into "just
+     memorise the chart". It cannot be satisfied by accident: `answers` is used
+     by nothing at runtime, so a chart that passes it passes on the merits. */
+
+  const soundedBeats = new Set(music.map((e) => Math.round(e.beat * 48) / 48));
+  const hasSoundAt = (beat) => soundedBeats.has(Math.round(beat * 48) / 48);
+
+  ok(notes.every((n) => n.answers != null), 'every note declares what it answers',
+    `${notes.filter((n) => n.answers == null).length} without \`answers\``);
+
+  const orphan = notes.find((n) => n.answers != null && !hasSoundAt(n.answers));
+  ok(!orphan, 'every note\'s call is actually sounded in the music',
+    orphan && `note at beat ${orphan.beat} answers beat ${orphan.answers}, where nothing plays`);
+
+  let minLead = Infinity, minLeadAt = 0;
+  let maxLead = 0, maxLeadAt = 0;
+  for (const n of notes) {
+    if (n.answers == null) continue;
+    const lead = c.beatToTime(n.beat) - c.beatToTime(n.answers);
+    if (lead < minLead) { minLead = lead; minLeadAt = n.beat; }
+    if (lead > maxLead) { maxLead = lead; maxLeadAt = n.beat; }
+  }
+  // 250ms is about the floor for hearing a cue and acting on it deliberately.
+  ok(minLead >= 0.25, 'no call lands less than 250ms before the note it cues',
+    `min lead ${(minLead * 1000).toFixed(0)}ms at beat ${minLeadAt}`);
+  // Beyond ~8s you are testing memory, not rhythm.
+  ok(maxLead <= 8.0, 'no call is more than 8s ahead of its note',
+    `max lead ${maxLead.toFixed(2)}s at beat ${maxLeadAt}`);
+  console.log(`    telegraph lead: ${(minLead * 1000).toFixed(0)}–${(maxLead * 1000).toFixed(0)}ms`);
+
+  // Cue list sanity — the stage reacts to these, so a stale one is a visual bug.
+  ok(cues.length > 0, 'declares presentation cues');
+  ok(cues.every((q) => q.beat >= 0 && q.beat <= L.endBeat + 1), 'all cues fall inside the song');
+  ok(!!L.stage, 'names a stage');
+  ok(!!L.verb, 'states its verb in one line');
 
   ok(notes.length > 0, 'has notes');
   ok(music.length > 0, 'has music events');
@@ -182,9 +229,21 @@ for (const L of LEVELS) {
   console.log(`    ${notes.length} notes · ${dur.toFixed(1)}s · ${nps.toFixed(2)} notes/sec avg · ${peak.toFixed(1)} peak`);
   console.log(`    ${music.length} music events · A/B split ${notes.filter(n=>n.action==='A').length}/${notes.filter(n=>n.action==='B').length}`);
 
-  const EXPECT = { easy: [0.4, 2.2], medium: [1.0, 4.5], hard: [1.6, 8.0] }[L.difficulty];
-  ok(nps >= EXPECT[0] && nps <= EXPECT[1],
-    `average density suits "${L.difficulty}" (${EXPECT[0]}–${EXPECT[1]} n/s)`, `got ${nps.toFixed(2)}`);
+  /* Difficulty is graded on PEAK density, not average.
+     Average notes/sec is meaningless for a call-and-response game: roughly half
+     of every song is the game playing AT you, during which the player correctly
+     does nothing. A level with a brutal peak and generous rests would score as
+     "easy" on the average and as accurate on the peak. Peak over a 2s window is
+     what the hands actually have to survive. */
+  const EXPECT = { easy: [1.5, 4.5], medium: [2.5, 6.5], hard: [4.0, 12.0] }[L.difficulty];
+  ok(peak >= EXPECT[0] && peak <= EXPECT[1],
+    `peak density suits "${L.difficulty}" (${EXPECT[0]}–${EXPECT[1]} n/s)`, `got ${peak.toFixed(2)}`);
+
+  /* And the flip side: the player must be doing something a reasonable share of
+     the time. A song that is 90% call is a listening exercise, not a game. */
+  const active = times.filter((_, i) => i === 0 || times[i].t - times[i - 1].t < 2).length;
+  ok(active / notes.length > 0.5, 'most notes sit inside a phrase rather than alone',
+    `${((active / notes.length) * 100).toFixed(0)}% clustered`);
 
   // Sections must be ordered and inside the song.
   ok(L.sections.every((s, i) => i === 0 || s.beat > L.sections[i - 1].beat), 'sections are ordered');

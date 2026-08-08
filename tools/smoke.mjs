@@ -7,11 +7,13 @@
  * a range of accuracies.
  *
  * That exercises, for real:
- *   • every branch of the renderer, including the miss/hold/judged cue states,
- *     all three scenes, all five critters, banners, count-in and the pause overlay
+ *   • every Stage: all three minigames' scenery, characters, cue reactions and
+ *     failure states, plus banners, count-in and the pause overlay
  *   • the judge across a full song, including hold press/release
  *   • the juice system's particle/popup/ring lifecycles
  *   • the sequencer's lookahead against a moving clock
+ *   • the cue pump — every crow caw, sung phrase, whistle and parcel launch
+ *     is dispatched to its stage at the right song time
  *
  * It cannot tell you the game LOOKS good. It can tell you the game does not
  * throw on frame 4,912 of the hard level, which is the class of bug that is
@@ -350,7 +352,11 @@ try {
 
 console.log('\nInput design: event.timeStamp vs. reading input in the frame loop');
 try {
-  const level = LEVELS[1];
+  // Run this on the FASTEST level. On a slow chart the ~12ms of systematic
+  // lateness that frame-quantized input introduces stays inside the ±32ms
+  // perfect window, so the score looks fine and the bug hides. It only shows up
+  // where the margins are thin — which is exactly where players notice it.
+  const level = LEVELS[2];
   const good = runLevel(level, 1.0).result;
   const bad = runLevel(level, 1.0, { frameQuantized: true }).result;
 

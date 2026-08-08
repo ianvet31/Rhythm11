@@ -31,9 +31,8 @@ import { Play } from './game/play.js';
 import { Calibrator } from './game/calibrate.js';
 import { LEVELS } from './game/levels/index.js';
 import { PALETTES } from './render/palette.js';
-import { boldText, layer, circle, star, stroke_, INK, ease, clamp, lerp } from './render/shapes.js';
-import * as Critters from './render/critters.js';
-import { savannaScene } from './render/scenes.js';
+import { boldText, layer, circle, ellipse, star, stroke_, INK, ease, clamp, lerp } from './render/shapes.js';
+import { pip, puddle, crow } from './render/folks.js';
 
 /* ── Persistence ───────────────────────────────────────────────────────────── */
 
@@ -52,7 +51,9 @@ const save = loadSave();
 const settings = {
   music: 0.85,
   sfx: 0.9,
-  showMeter: true,
+  // Off by default: it's a useful practice tool and a terrible habit. See the
+  // note at the top of render/hud.js.
+  showMeter: false,
   audioOffsetMs: 0,
   visualOffsetMs: 0,
   ...save.settings,
@@ -101,13 +102,15 @@ function showTitle() {
   clearUI();
   const p = el('div', 'panel', `
     <h1>RHYTHM 11</h1>
-    <h2>a game about hitting things exactly on time</h2>
-    <p>Headphones recommended. Wired, if you have them.</p>
+    <h2>listen first. there is no note highway.</h2>
+    <p>Every rhythm is played TO you before you're asked to play it back.
+       Watch the little guy, but trust your ears — the pictures lie, the music doesn't.</p>
     <button class="btn" id="go">PRESS TO BEGIN</button>
     <div class="hint">
-      <kbd>Space</kbd> <kbd>J</kbd> <kbd>F</kbd> = <b>A</b> (ball) &nbsp;·&nbsp;
-      <kbd>K</kbd> <kbd>D</kbd> = <b>B</b> (diamond)<br>
-      <kbd>Esc</kbd> pause &nbsp;·&nbsp; touch: tap left half / right half
+      <kbd>Space</kbd> <kbd>J</kbd> <kbd>F</kbd> = <b>A</b> &nbsp;·&nbsp;
+      <kbd>K</kbd> <kbd>D</kbd> = <b>B</b> &nbsp;·&nbsp;
+      <kbd>Esc</kbd> pause<br>
+      Headphones recommended. Wired, if you have them.
     </div>
   `);
   uiRoot.appendChild(p);
@@ -128,6 +131,7 @@ function showMenu() {
         <div class="name">${l.name}</div>
         <div class="diff d-${l.difficulty}">${l.difficulty} · ${l.bpm} BPM</div>
         <div class="blurb">${l.blurb}</div>
+        <div class="verb">${l.verb}</div>
         ${best ? `<div class="blurb" style="margin-top:8px;opacity:1;color:var(--pop2)">
           BEST ${best.rank} · ${(best.accuracy * 100).toFixed(1)}% · ${best.score}</div>` : ''}
       </button>`;
@@ -349,21 +353,72 @@ function frame(perfMs) {
   juice.draw(view.ctx);
 }
 
+/**
+ * Menu backdrop — Pip ambling along in the rain forever, at a lazy 96 BPM.
+ *
+ * Purely decorative, and it demonstrates the point of the whole rebuild: even
+ * standing still on a menu, the character is the thing on screen, not a lane.
+ */
 function drawBackdrop(c, t) {
-  const P = PALETTES.savanna;
-  const beat = t * (100 / 60);
-  savannaScene(c, P, { beat, hype: 0.2, time: t });
-  Critters.crowd(c, P, { x: 40, y: 322, w: 880, count: 12, beat, hype: 0.3, s: 0.8 });
-  Critters.giraffe(c, P, { x: 790, y: 470, s: 0.95, phase: beat % 1, beat, baton: 1, blink: 0 });
-  [180, 280].forEach((x, i) => {
-    Critters.burrow(c, P, { x, y: 470, s: 0.9 });
-    Critters.meerkat(c, P, {
-      x, y: 470, s: 0.9, pop: 1, phase: (beat + i * 0.5) % 1,
-      look: [0.4, 0], seed: i,
-    });
+  const P = PALETTES.park;
+  const beat = t * (96 / 60);
+  const step = Math.floor(beat);
+  const stride = beat - step;
+
+  const g = c.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, P.skyTop);
+  g.addColorStop(1, P.skyBot);
+  c.fillStyle = g;
+  c.fillRect(0, 0, VW, VH);
+  circle(c, 700, 118, 62, 'rgba(255,240,208,0.32)', 0);
+
+  // Hills
+  for (const [k, col, base] of [[0.4, P.far, 300], [0.8, P.mid, 340], [1.4, P.near, 372]]) {
+    const off = (t * k * 26) % 320;
+    c.fillStyle = col;
+    c.beginPath();
+    c.moveTo(-40, VH);
+    for (let x = -40; x <= VW + 60; x += 24) {
+      const wx = x + off;
+      c.lineTo(x, base - 28 * Math.sin(wx * 0.006) - 14 * Math.sin(wx * 0.017 + 1.1));
+    }
+    c.lineTo(VW + 60, VH);
+    c.closePath();
+    c.fill();
+  }
+
+  c.fillStyle = P.ground;
+  c.fillRect(0, 424, VW, VH - 424);
+  c.fillStyle = P.groundDark;
+  c.fillRect(0, 474, VW, VH - 474);
+
+  const scroll = (beat * 62) % 62;
+  for (let i = -1; i < 18; i++) {
+    ellipse(c, i * 62 - scroll, 434, 20, 7, P.stone, 3.5);
+  }
+  puddle(c, P, { x: 760 - ((beat * 62) % 900), y: 439, w: 130 });
+
+  crow(c, P, { x: 860, y: 180, s: 0.95, caw: Math.max(0, 1 - (beat % 4) * 3), beat, blink: 0 });
+  pip(c, P, {
+    x: 300, y: 430, s: 1.05,
+    stride, footL: step % 2 === 0, hop: 0, splash: 0, mood: 1,
+    look: [0.35, 0],
   });
+
+  // Rain
+  layer(c, () => {
+    c.strokeStyle = P.rain;
+    c.lineWidth = 1.6;
+    for (let i = 0; i < 70; i++) {
+      const s = (Math.sin(i * 78.233) * 43758.5453) % 1;
+      const sx = ((s * 1.3 + 1) % 1) * (VW + 200) - 100;
+      const y = ((t * (620 + s * 260) + s * 900) % (VH + 90)) - 40;
+      c.beginPath(); c.moveTo(sx, y); c.lineTo(sx - 7, y + 22); c.stroke();
+    }
+  });
+
   // Dim so the DOM panel on top stays readable.
-  c.fillStyle = 'rgba(18,14,31,0.55)';
+  c.fillStyle = 'rgba(18,14,31,0.52)';
   c.fillRect(0, 0, VW, VH);
 }
 

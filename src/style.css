@@ -98,6 +98,13 @@ html, body {
 .level-card .name  { font-size: 18px; font-weight: bold; color: var(--pop2); }
 .level-card .diff  { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; margin: 4px 0 8px; }
 .level-card .blurb { font-size: 12.5px; opacity: 0.75; line-height: 1.4; }
+.level-card .verb {
+  font-size: 12px;
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(253, 246, 227, 0.18);
+  color: var(--cool);
+}
 .d-easy   { color: var(--cool); }
 .d-medium { color: var(--pop2); }
 .d-hard   { color: var(--pop); }
