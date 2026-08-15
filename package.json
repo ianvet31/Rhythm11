@@ -10,6 +10,7 @@
     "check": "node tools/check.mjs",
     "smoke": "node tools/smoke.mjs",
     "build": "node tools/build.mjs",
+    "lab": "npx --yes serve -l 3000 . && echo open http://localhost:3000/tools/chart-lab.html",
     "test": "node tools/check.mjs && node tools/smoke.mjs && node tools/build.mjs && node tools/bundle-boot.mjs"
   }
 }

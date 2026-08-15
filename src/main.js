@@ -28,6 +28,7 @@ import { AudioBus, Voices } from './audio/synth.js';
 import { Conductor } from './core/conductor.js';
 import { InputRouter } from './core/input.js';
 import { Play } from './game/play.js';
+import { loadTrack } from './audio/track.js';
 import { Calibrator } from './game/calibrate.js';
 import { LEVELS } from './game/levels/index.js';
 import { PALETTES } from './render/palette.js';
@@ -246,12 +247,61 @@ function showCalibrate(firstRun) {
   };
 }
 
-function startLevel(id) {
+/**
+ * Start a level, loading its recorded track first if it has one.
+ *
+ * Decoding is the slow part — a three-minute track can take over a second, and
+ * it happens on a background thread we can't interrupt. Doing it before the
+ * count-in rather than during it is the difference between a loading bar and a
+ * mysteriously late first beat.
+ */
+async function startLevel(id) {
   const level = LEVELS.find((l) => l.id === id);
   clearUI();
-  screen = 'play';
   juice.clear();
-  play = new Play({ view, bus, conductor, input, juice, settings }, level, (r) => showResults(r));
+
+  let track = null;
+  if (level.audio) {
+    screen = 'loading';
+    const panel = el('div', 'panel', `
+      <h1>${level.name}</h1>
+      <p id="lmsg">loading audio…</p>
+      <div style="height:10px;background:rgba(255,255,255,0.12);border-radius:5px;overflow:hidden">
+        <div id="lbar" style="height:100%;width:0%;background:var(--pop2);transition:width .12s"></div>
+      </div>
+      <div class="hint" id="lnote"></div>
+    `);
+    uiRoot.appendChild(panel);
+    const bar = panel.querySelector('#lbar');
+    const msg = panel.querySelector('#lmsg');
+    const note = panel.querySelector('#lnote');
+
+    try {
+      track = await loadTrack(bus.ctx ?? ctx, level.audio, (loaded, total) => {
+        bar.style.width = `${Math.round((loaded / total) * 92)}%`;
+      });
+      msg.textContent = 'decoding…';
+      bar.style.width = '100%';
+      const d = track.describe();
+      // Surface the measured alignment: if the detected silence is wildly
+      // different from what you expected, this is where you find out.
+      note.textContent =
+        `${d.duration.toFixed(1)}s · ${d.sampleRate}Hz · ${d.channels}ch · `
+        + `${d.megabytes.toFixed(0)}MB · trimmed ${d.detectedSilenceMs.toFixed(1)}ms of leading silence`;
+      await new Promise((r) => setTimeout(r, 220));
+    } catch (e) {
+      msg.textContent = 'Could not load the audio for this level.';
+      note.textContent = String(e.message).slice(0, 400);
+      const back = el('button', 'btn', 'BACK');
+      back.onclick = () => showMenu();
+      panel.appendChild(back);
+      return;
+    }
+  }
+
+  clearUI();
+  screen = 'play';
+  play = new Play({ view, bus, conductor, input, juice, settings, track }, level, (r) => showResults(r));
   play.start();
 }
 

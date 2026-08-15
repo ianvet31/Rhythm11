@@ -2,3 +2,12 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Audio assets — large, and usually not wanted in git.
+# Delete these lines if you'd rather commit your songs.
+assets/*.wav
+assets/*.flac
+assets/*.ogg
+assets/*.m4a
+assets/*.mp3
+assets/*.aiff

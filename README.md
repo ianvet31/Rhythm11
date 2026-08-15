@@ -240,6 +240,34 @@ physics.
 
 ---
 
+## Using your own songs
+
+Everything synthesized so far, but the engine takes recorded tracks too — see
+**[docs/AUDIO.md](docs/AUDIO.md)** for the full workflow.
+
+The short version, and the one thing that will bite you: **you cannot trust
+where a compressed audio file starts.** Codecs pad the front of the file to fill
+the first block, and how much the decoder strips varies by codec, encoder and
+browser — a gapless AAC clip can come out ~45ms late in Chrome/Firefox/Edge and
+correct in Safari. That's larger than the entire ±32ms perfect window, so a chart
+authored in one browser would be unplayable in another.
+
+The fix is to not trust the file. `src/audio/track.js` decodes to an
+`AudioBuffer` and then *measures the decoded samples* to find where the audio
+really begins. By then the codec and the browser's padding behaviour have already
+happened and are baked into samples we can see, so the answer is identical
+everywhere.
+
+`tools/chart-lab.html` is the authoring tool: drop a song in, get a waveform with
+a beat grid, nudge BPM and offset against a metronome, tap out a chart, export a
+ready-to-paste level file. It also runs a **drift check** — comparing the grid fit
+at the start of the song against the end — because a BPM that's off by 0.05
+drifts 0.6ms per beat, which is invisible in bar 1 and over 100ms by the outro.
+
+Recorded tracks and synthesized events can run *together*, scheduled from the same
+beat-0 instant, so you can keep cue sounds in the synth and tweak them without
+re-rendering the song.
+
 ## Verification
 
 ```bash
@@ -267,6 +295,13 @@ real browsers.
 rewrites module syntax with regexes, which fails silently: the output is still
 valid JavaScript with the wrong bindings. `node --check` proves nothing.
 
+The audio analysis is tested against **synthetic audio with known ground truth** —
+click trains at a known tempo with known silence bolted on the front. That's the
+only honest way to test it: these functions fail in ways that are invisible until
+you're 90 seconds into a real track, so asserting "a 4ms-per-beat drift gets
+flagged" against audio we constructed to drift by exactly that much is worth more
+than any amount of listening.
+
 **Not verified:** nobody has looked at this in a browser. There's no Chrome on
 this machine and the extension never connected. The tests prove it doesn't throw
 and the timing maths is exact; they cannot tell you whether the art reads or the
@@ -280,6 +315,7 @@ feel lands.
 src/
   core/       conductor (the three clocks) · input · judge
   audio/      synth (every sound, from oscillators) · sequencer (lookahead)
+              track (load + align a recorded song) · analysis (onsets, grid fit)
   render/     view · shapes · folks (the cast) · juice · hud · palette
   game/
     play.js     engine: time, input, judgment, feedback
@@ -288,7 +324,9 @@ src/
     levels/     one music + chart + cue list per minigame
     calibrate.js
   main.js     entry, screens, the single rAF loop
-tools/        check · smoke · build · bundle-boot
+tools/        check · smoke · build · bundle-boot · chart-lab.html
+docs/         AUDIO.md — formats, FL Studio export, alignment workflow
+assets/       your songs go here (gitignored by default)
 ```
 
 The engine/stage split is what lets three minigames with nothing visual in common

@@ -15,6 +15,10 @@ import { Judge, Grade, gradeFor, WINDOWS, MISS_AFTER } from '../src/core/judge.j
 import { swingBeat, steps, mel } from '../src/audio/sequencer.js';
 import { Voices } from '../src/audio/synth.js';
 import { LEVELS } from '../src/game/levels/index.js';
+import {
+  detectLeadingSilence, onsetEnvelope, pickOnsets, scoreGrid, fitGrid,
+  checkDrift, quantise, peakEnvelope,
+} from '../src/audio/analysis.js';
 
 let failures = 0;
 let checks = 0;
@@ -297,6 +301,97 @@ section('Notation');
   ok(Math.abs(m[0].beats - 1) < 1e-9, 'a tie doubles the note length');
   ok(Math.abs(m[1].beat - 1.5) < 1e-9, 'rests advance the cursor');
   ok(mel('[C4,E4]', 2)[0].notes.length === 2, 'chords parse');
+}
+
+/* ── Audio analysis ────────────────────────────────────────────────────────
+   These functions decide whether a recorded song lines up with its chart, and
+   they fail in ways that are invisible until you're 90 seconds into a track. So
+   they're exercised against synthetic audio with known ground truth: a click
+   train at a known tempo, with known silence bolted on the front. */
+
+section('Audio analysis');
+{
+  const SR = 44100;
+
+  /** A click train: sharp decaying blips every `beatSec`, after `leadSec`. */
+  const makeClicks = (bpm, leadSec, durSec, jitterPerBeat = 0) => {
+    const n = Math.floor(SR * durSec);
+    const d = new Float32Array(n);
+    const beat = 60 / bpm;
+    let k = 0;
+    for (let t = leadSec; t < durSec; t += beat) {
+      const at = t + k * jitterPerBeat;
+      k++;
+      const s = Math.floor(at * SR);
+      for (let i = 0; i < 900 && s + i < n; i++) {
+        d[s + i] = Math.sin(i * 0.4) * Math.exp(-i / 160);
+      }
+    }
+    return d;
+  };
+
+  // ── Leading silence
+  const c1 = makeClicks(120, 0.25, 8);
+  const sil = detectLeadingSilence(c1, SR);
+  ok(Math.abs(sil - 0.25) < 0.01, 'detects 250ms of leading silence',
+    `got ${(sil * 1000).toFixed(1)}ms`);
+
+  const c0 = makeClicks(120, 0, 8);
+  ok(detectLeadingSilence(c0, SR) < 0.005, 'reports ~0 when audio starts immediately');
+
+  // A lone spike must not count as the start — this is the codec-dither case.
+  const spiky = makeClicks(120, 0.5, 8);
+  spiky[Math.floor(0.1 * SR)] = 0.9;
+  const sil2 = detectLeadingSilence(spiky, SR);
+  ok(sil2 > 0.4, 'a single stray sample does not register as the start',
+    `got ${(sil2 * 1000).toFixed(1)}ms`);
+
+  // ── Onsets
+  const oe = onsetEnvelope(c1, SR);
+  const times = pickOnsets(oe);
+  ok(times.length >= 14 && times.length <= 17,
+    'finds one onset per beat in an 8s 120BPM click train', `found ${times.length}`);
+  ok(Math.abs(times[0] - 0.25) < 0.03, 'first onset is at the first click',
+    `got ${times[0].toFixed(3)}s`);
+
+  // ── Grid scoring: the right grid must beat a shifted one.
+  const onGrid = scoreGrid(oe, 120, 0.25);
+  const offGrid = scoreGrid(oe, 120, 0.25 + 0.25);   // half a beat out
+  ok(onGrid > offGrid * 2, 'a correct grid scores far above a half-beat-shifted one',
+    `${onGrid.toFixed(3)} vs ${offGrid.toFixed(3)}`);
+
+  const wrongTempo = scoreGrid(oe, 137, 0.25);
+  ok(onGrid > wrongTempo, 'the correct tempo scores above a wrong one',
+    `${onGrid.toFixed(3)} vs ${wrongTempo.toFixed(3)}`);
+
+  // ── Fitting with a known BPM: should recover the offset closely.
+  const fit = fitGrid(oe, [70, 190], 120);
+  ok(Math.abs(fit.offset - 0.25) < 0.02, 'fitGrid recovers a known offset',
+    `got ${fit.offset.toFixed(4)}s`);
+
+  // ── Drift: a track whose real tempo differs slightly from the declared one
+  // must be caught. This is THE failure that ruins a long chart.
+  const drifting = makeClicks(120, 0, 60, 0.004);   // 4ms late per beat
+  const de = onsetEnvelope(drifting, SR);
+  const steady = onsetEnvelope(makeClicks(120, 0, 60), SR);
+  const dDrift = checkDrift(de, 120, 0);
+  const dSteady = checkDrift(steady, 120, 0);
+  ok(dSteady.ratio > dDrift.ratio,
+    'drift check scores a steady track above a drifting one',
+    `steady ${dSteady.ratio.toFixed(2)} vs drifting ${dDrift.ratio.toFixed(2)}`);
+  ok(dDrift.ratio < 0.6, 'a 4ms-per-beat drift is flagged',
+    `ratio ${dDrift.ratio.toFixed(2)}`);
+
+  // ── Quantise
+  ok(Math.abs(quantise(0.51, 120, 0, 4, 1) - 0.5) < 1e-9, 'quantise snaps to the nearest 16th');
+  ok(Math.abs(quantise(0.51, 120, 0, 4, 0) - 0.51) < 1e-9, 'strength 0 leaves the time alone');
+  ok(Math.abs(quantise(0.52, 120, 0, 4, 0.5) - 0.51) < 1e-9, 'half-strength moves halfway');
+
+  // ── Peak envelope
+  const pe = peakEnvelope(c1, 100);
+  ok(pe.max.length === 100 && pe.min.length === 100, 'peakEnvelope returns the requested buckets');
+  ok(pe.max[0] < 0.01, 'the silent head of the envelope is flat');
+  ok(Math.max(...pe.max) > 0.5, 'the envelope captures the peaks');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`} — ${checks} checks\n`);

@@ -61,8 +61,22 @@ export class Play {
     this.cues = compileCues(level.cues ? level.cues() : [], this.conductor);
 
     this.judge = new Judge(this.notes);
+
+    /**
+     * A level's music can come from either source, or BOTH:
+     *
+     *   music()   synthesized events, scheduled by the lookahead sequencer
+     *   deps.track  a decoded recorded song (see audio/track.js)
+     *
+     * Both are legitimate and layering them is genuinely useful: you can run a
+     * real produced track underneath while the game still synthesizes its
+     * telegraphs — the crow's caw, the whistle — so cues stay perfectly aligned
+     * and stay audible over a busy mix, without having to bake them into the
+     * export and re-render every time you tweak a chart.
+     */
     this.sequencer = new Sequencer(this.bus, this.conductor);
-    this.sequencer.load(level.music());
+    this.sequencer.load(level.music ? level.music() : []);
+    this.track = deps.track || null;
 
     const StageClass = STAGES[level.stage];
     if (!StageClass) throw new Error(`Unknown stage: ${level.stage}`);
@@ -114,8 +128,15 @@ export class Play {
     this.finished = false;
     this.verbAge = 0;
 
+    // One `startCtx` drives everything: the synth sequencer and the recorded
+    // track are both aligned to the same absolute instant of beat 0, so they
+    // are sample-accurate against each other and against judgment.
     const startCtx = this.conductor.start(1.6);
     this.sequencer.start(startCtx);
+    if (this.track) {
+      this.track.connect(this.bus.music);
+      this.track.start(startCtx);
+    }
     this.started = true;
 
     this.input.enabled = true;
@@ -125,6 +146,7 @@ export class Play {
 
   stop() {
     this.sequencer.stop();
+    this.track?.stop();
     this.conductor.stop();
     this.input.onPress = null;
     this.input.onRelease = null;

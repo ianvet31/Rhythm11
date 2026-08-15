@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chart Lab — Rhythm 11</title>
+<style>
+  :root { --ink:#17131f; --paper:#fdf6e3; --pop:#ff5c7a; --pop2:#ffd23f; --cool:#3ddad7; --deep:#1d1730; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--deep); color:var(--paper); font:14px/1.5 "Trebuchet MS",Verdana,sans-serif; padding:18px; }
+  h1 { font-size:22px; color:var(--pop2); letter-spacing:1px; }
+  h1 small { color:var(--paper); opacity:.55; font-size:13px; letter-spacing:0; font-weight:normal; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; margin:14px 0; }
+  .f { display:flex; flex-direction:column; gap:3px; }
+  .f label { font-size:11px; opacity:.6; text-transform:uppercase; letter-spacing:1px; }
+  input[type=number], input[type=text], select {
+    background:rgba(255,255,255,.08); border:1px solid rgba(253,246,227,.28); color:var(--paper);
+    border-radius:6px; padding:6px 8px; font:inherit; width:118px;
+  }
+  button {
+    font:inherit; font-weight:bold; color:var(--ink); background:var(--pop2); border:none;
+    border-radius:999px; padding:8px 18px; cursor:pointer; box-shadow:0 4px 0 #c9a01f;
+  }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 #c9a01f; }
+  button.ghost { background:transparent; color:var(--paper); border:2px solid rgba(253,246,227,.4); box-shadow:none; }
+  button:disabled { opacity:.4; cursor:default; }
+  canvas { display:block; width:100%; background:#120e1f; border-radius:10px; border:1px solid rgba(253,246,227,.18); }
+  #drop { border:2px dashed rgba(253,246,227,.35); border-radius:12px; padding:34px; text-align:center; opacity:.85; }
+  #drop.over { border-color:var(--pop2); background:rgba(255,210,63,.08); }
+  pre { background:#120e1f; border:1px solid rgba(253,246,227,.18); border-radius:10px; padding:12px;
+        font:12px/1.45 ui-monospace,Menlo,monospace; max-height:280px; overflow:auto; white-space:pre; }
+  .stat { display:inline-block; margin-right:18px; font-size:12.5px; opacity:.8; }
+  .stat b { color:var(--pop2); font-size:14px; }
+  .warn { color:var(--pop); }
+  .good { color:var(--cool); }
+  kbd { background:rgba(253,246,227,.14); border:1px solid rgba(253,246,227,.35); border-radius:4px; padding:1px 6px; font-size:.9em; }
+  .hint { font-size:12px; opacity:.6; margin-top:8px; }
+</style>
+</head>
+<body>
+
+<h1>Chart Lab <small>— get a song aligned, then tap a chart against it</small></h1>
+
+<div id="drop">
+  <b>Drop an audio file here</b> (or <label style="text-decoration:underline;cursor:pointer">browse<input id="file" type="file" accept="audio/*" hidden></label>)<br>
+  <span class="hint">WAV or FLAC while you're working. Nothing is uploaded — it all stays in the browser.</span>
+</div>
+
+<div id="app" style="display:none">
+
+  <div class="row">
+    <div class="f"><label>BPM (from your DAW)</label><input id="bpm" type="number" step="0.001" value="120"></div>
+    <div class="f"><label>Offset to beat 1 (s)</label><input id="off" type="number" step="0.001" value="0"></div>
+    <div class="f"><label>Grid</label>
+      <select id="sub">
+        <option value="1">1/4 (beats)</option>
+        <option value="2">1/8</option>
+        <option value="4" selected>1/16</option>
+        <option value="3">1/8 triplet</option>
+        <option value="6">1/16 triplet</option>
+      </select>
+    </div>
+    <button id="autofit" class="ghost">AUTO-FIT</button>
+    <button id="metro" class="ghost">CLICK: ON</button>
+    <button id="play">PLAY</button>
+    <button id="stop" class="ghost">STOP</button>
+  </div>
+
+  <div class="row" style="margin-top:-4px">
+    <span class="stat">length <b id="s-len">–</b></span>
+    <span class="stat">rate <b id="s-rate">–</b></span>
+    <span class="stat">leading silence <b id="s-sil">–</b></span>
+    <span class="stat">drift check <b id="s-drift">–</b></span>
+    <span class="stat">notes <b id="s-notes">0</b></span>
+  </div>
+
+  <canvas id="wave" height="190"></canvas>
+  <div class="hint">
+    Click the waveform to seek. <kbd>Space</kbd> play/pause · <kbd>F</kbd>/<kbd>J</kbd> tap a note ·
+    <kbd>K</kbd> tap a B note · <kbd>Z</kbd> undo last · <kbd>Backspace</kbd> clear
+  </div>
+
+  <div class="row">
+    <div class="f"><label>Quantise</label>
+      <select id="quant">
+        <option value="1">snap to grid</option>
+        <option value="0.5">half-snap</option>
+        <option value="0">raw (no snap)</option>
+      </select>
+    </div>
+    <div class="f"><label>Level id</label><input id="lid" type="text" value="mysong"></div>
+    <div class="f"><label>Level name</label><input id="lname" type="text" value="My Song"></div>
+    <button id="export">EXPORT LEVEL FILE</button>
+    <button id="copy" class="ghost">COPY</button>
+  </div>
+
+  <pre id="out">Tap some notes, then hit export.</pre>
+</div>
+
+<script type="module">
+import {
+  toMono, peakEnvelope, onsetEnvelope, pickOnsets, fitGrid, checkDrift,
+  detectLeadingSilence, quantise,
+} from '../src/audio/analysis.js';
+
+/* ── State ──────────────────────────────────────────────────────────────── */
+
+const ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+let buffer = null;
+let mono = null;
+let env = null;          // peak envelope for drawing
+let onsets = null;       // onset envelope
+let onsetTimes = [];
+let notes = [];          // { t, action }
+let source = null;
+let startCtx = 0;        // ctx time at which file position 0 played
+let playing = false;
+let metroOn = true;
+let metroTimer = null;
+let nextClickBeat = 0;
+
+const $ = (id) => document.getElementById(id);
+const wave = $('wave');
+const wctx = wave.getContext('2d');
+
+const bpm = () => Number($('bpm').value) || 120;
+const offset = () => Number($('off').value) || 0;
+const sub = () => Number($('sub').value) || 4;
+
+/* ── Load ───────────────────────────────────────────────────────────────── */
+
+const drop = $('drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+});
+$('file').addEventListener('change', (e) => { if (e.target.files[0]) load(e.target.files[0]); });
+
+async function load(file) {
+  drop.innerHTML = `<b>decoding ${file.name}…</b>`;
+  await ctx.resume();
+  const bytes = await file.arrayBuffer();
+  buffer = await ctx.decodeAudioData(bytes);
+  mono = toMono(buffer);
+
+  // Everything below runs on the DECODED samples, which is the whole point:
+  // whatever the codec and this browser did about padding has already happened
+  // and is visible to us. See src/audio/analysis.js.
+  onsets = onsetEnvelope(mono, buffer.sampleRate);
+  onsetTimes = pickOnsets(onsets);
+  const silence = detectLeadingSilence(mono, buffer.sampleRate);
+
+  $('s-len').textContent = `${buffer.duration.toFixed(2)}s`;
+  $('s-rate').textContent = `${buffer.sampleRate}Hz ${buffer.numberOfChannels}ch`;
+  $('s-sil').textContent = `${(silence * 1000).toFixed(1)}ms`;
+  $('lid').value = file.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]+/gi, '').toLowerCase() || 'mysong';
+  $('lname').value = file.name.replace(/\.[^.]+$/, '');
+  $('off').value = silence.toFixed(3);
+
+  drop.style.display = 'none';
+  $('app').style.display = '';
+  resize();
+  autofit();
+  requestAnimationFrame(draw);
+}
+
+/* ── Alignment ──────────────────────────────────────────────────────────── */
+
+$('autofit').onclick = autofit;
+
+function autofit() {
+  if (!onsets) return;
+  // Trust the typed BPM if it looks deliberate (someone changed it from the
+  // default), otherwise search. Tempo estimation guesses half/double time
+  // often enough that the DAW's number should always win when we have it.
+  const typed = bpm();
+  const known = typed && Math.abs(typed - 120) > 0.001 ? typed : null;
+  const fit = fitGrid(onsets, [70, 190], known);
+  $('bpm').value = fit.bpm.toFixed(3);
+  $('off').value = fit.offset.toFixed(3);
+  updateDrift();
+}
+
+function updateDrift() {
+  if (!onsets) return;
+  const d = checkDrift(onsets, bpm(), offset());
+  const el = $('s-drift');
+  if (d.ratio > 0.75) { el.textContent = 'solid'; el.className = 'good'; }
+  else if (d.ratio > 0.5) { el.textContent = `weak (${d.ratio.toFixed(2)})`; el.className = ''; }
+  else { el.textContent = `DRIFTING (${d.ratio.toFixed(2)}) — check BPM`; el.className = 'warn'; }
+}
+
+for (const id of ['bpm', 'off']) $(id).addEventListener('input', updateDrift);
+
+/* ── Transport ──────────────────────────────────────────────────────────── */
+
+let seekTo = 0;
+
+function play(from = seekTo) {
+  stop();
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(ctx.destination);
+  startCtx = ctx.currentTime + 0.08 - from;
+  src.start(ctx.currentTime + 0.08, Math.max(0, from));
+  source = src;
+  playing = true;
+  nextClickBeat = Math.floor((from - offset()) / (60 / bpm())) + 1;
+  if (metroOn) metroTimer = setInterval(pumpMetronome, 25);
+  $('play').textContent = 'PAUSE';
+}
+
+function stop() {
+  if (source) { try { source.stop(); } catch {} source.disconnect(); source = null; }
+  if (metroTimer) { clearInterval(metroTimer); metroTimer = null; }
+  playing = false;
+  $('play').textContent = 'PLAY';
+}
+
+const now = () => (playing ? ctx.currentTime - startCtx : seekTo);
+
+$('play').onclick = () => { if (playing) { seekTo = now(); stop(); } else play(); };
+$('stop').onclick = () => { stop(); seekTo = 0; };
+$('metro').onclick = () => {
+  metroOn = !metroOn;
+  $('metro').textContent = `CLICK: ${metroOn ? 'ON' : 'OFF'}`;
+  if (!metroOn && metroTimer) { clearInterval(metroTimer); metroTimer = null; }
+  else if (metroOn && playing) metroTimer = setInterval(pumpMetronome, 25);
+};
+
+/**
+ * The metronome is the real alignment test.
+ *
+ * Looking at a waveform tells you roughly where the grid is. HEARING a click
+ * against the track tells you exactly — a few milliseconds out and you get a
+ * flam, which is far easier to notice than a few pixels of misalignment. Get
+ * the click sitting inside the kick drum and your offset is right.
+ *
+ * Scheduled with the same lookahead pattern as the game's sequencer, for the
+ * same reason: a click scheduled from a timer callback would jitter.
+ */
+function pumpMetronome() {
+  const beatSec = 60 / bpm();
+  const horizon = ctx.currentTime + 0.25;
+  for (;;) {
+    const t = startCtx + offset() + nextClickBeat * beatSec;
+    if (t > horizon) break;
+    if (t > ctx.currentTime) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const down = ((nextClickBeat % 4) + 4) % 4 === 0;
+      o.type = 'square';
+      o.frequency.value = down ? 1600 : 1050;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(down ? 0.22 : 0.12, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t + 0.06);
+    }
+    nextClickBeat++;
+  }
+}
+
+/* ── Tapping ────────────────────────────────────────────────────────────── */
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.repeat) return;
+
+  if (e.code === 'Space') { e.preventDefault(); $('play').onclick(); return; }
+  if (e.code === 'KeyZ') { notes.pop(); refreshCount(); return; }
+  if (e.code === 'Backspace') { e.preventDefault(); notes = []; refreshCount(); return; }
+
+  const action = (e.code === 'KeyK' || e.code === 'KeyD') ? 'B'
+    : (e.code === 'KeyF' || e.code === 'KeyJ') ? 'A' : null;
+  if (!action || !playing) return;
+  e.preventDefault();
+
+  // event.timeStamp, not performance.now() — same reason as the game itself.
+  // See src/core/input.js.
+  const t = (e.timeStamp / 1000 + clockOffset()) - startCtx;
+  const q = Number($('quant').value);
+  const snapped = q > 0 ? quantise(t, bpm(), offset(), sub(), q) : t;
+  notes.push({ t: snapped, raw: t, action });
+  refreshCount();
+});
+
+/** performance.now() → AudioContext time. Same trick as core/conductor.js. */
+function clockOffset() {
+  const ots = ctx.getOutputTimestamp?.();
+  if (ots && ots.contextTime > 0) {
+    return ots.contextTime + (ctx.outputLatency || 0) - ots.performanceTime / 1000;
+  }
+  return ctx.currentTime - performance.now() / 1000;
+}
+
+function refreshCount() { $('s-notes').textContent = String(notes.length); }
+
+/* ── Drawing ────────────────────────────────────────────────────────────── */
+
+const VIEW_SEC = 6;   // seconds of audio visible
+
+function resize() {
+  const w = wave.clientWidth;
+  wave.width = Math.floor(w * Math.min(devicePixelRatio || 1, 2));
+  wave.height = 190 * Math.min(devicePixelRatio || 1, 2);
+  if (buffer) env = peakEnvelope(mono, Math.floor(wave.width));
+}
+window.addEventListener('resize', resize);
+
+wave.addEventListener('click', (e) => {
+  const r = wave.getBoundingClientRect();
+  const frac = (e.clientX - r.left) / r.width;
+  const t = now() + (frac - 0.5) * VIEW_SEC;
+  seekTo = Math.max(0, Math.min(t, buffer.duration));
+  if (playing) play(seekTo);
+});
+
+function draw() {
+  requestAnimationFrame(draw);
+  if (!buffer) return;
+
+  const W = wave.width, H = wave.height;
+  const dpr = W / wave.clientWidth;
+  const t = now();
+  const t0 = t - VIEW_SEC / 2;
+  const pxPerSec = W / VIEW_SEC;
+
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.fillStyle = '#120e1f';
+  wctx.fillRect(0, 0, W, H);
+
+  const mid = H * 0.46;
+
+  // Waveform slice.
+  wctx.fillStyle = 'rgba(61,218,215,0.55)';
+  const bucketsPerSec = env.max.length / buffer.duration;
+  for (let px = 0; px < W; px++) {
+    const st = t0 + (px / pxPerSec);
+    const bi = Math.floor(st * bucketsPerSec);
+    if (bi < 0 || bi >= env.max.length) continue;
+    const hi = env.max[bi] * mid * 0.92;
+    const lo = env.min[bi] * mid * 0.92;
+    wctx.fillRect(px, mid - hi, 1, Math.max(hi - lo, 1));
+  }
+
+  // Grid. Beats bright, subdivisions faint — the point is to see at a glance
+  // whether the bright lines sit on the transients.
+  const beatSec = 60 / bpm();
+  const step = beatSec / sub();
+  const firstIdx = Math.ceil((t0 - offset()) / step);
+  for (let i = firstIdx; ; i++) {
+    const gt = offset() + i * step;
+    if (gt > t0 + VIEW_SEC) break;
+    const x = (gt - t0) * pxPerSec;
+    const isBeat = Math.abs((i / sub()) % 1) < 1e-9;
+    const isBar = isBeat && Math.abs((i / sub() / 4) % 1) < 1e-9;
+    wctx.fillStyle = isBar ? 'rgba(255,210,63,0.85)'
+      : isBeat ? 'rgba(255,210,63,0.42)' : 'rgba(255,255,255,0.13)';
+    wctx.fillRect(x, isBar ? 0 : H * 0.10, isBar ? 2 * dpr : 1 * dpr, isBar ? H : H * 0.8);
+  }
+
+  // Detected onsets, under the waveform — the ground truth you're aligning to.
+  wctx.fillStyle = 'rgba(255,92,122,0.8)';
+  for (const ot of onsetTimes) {
+    if (ot < t0 || ot > t0 + VIEW_SEC) continue;
+    wctx.fillRect((ot - t0) * pxPerSec - 1, H - 16 * dpr, 2 * dpr, 12 * dpr);
+  }
+
+  // Tapped notes.
+  for (const n of notes) {
+    if (n.t < t0 || n.t > t0 + VIEW_SEC) continue;
+    const x = (n.t - t0) * pxPerSec;
+    wctx.fillStyle = n.action === 'A' ? '#ffd23f' : '#3ddad7';
+    wctx.beginPath();
+    wctx.arc(x, H * 0.14, 7 * dpr, 0, Math.PI * 2);
+    wctx.fill();
+    // How far the raw tap was from the grid — your own timing error, visible.
+    if (n.raw != null) {
+      const rx = (n.raw - t0) * pxPerSec;
+      wctx.fillStyle = 'rgba(255,255,255,0.30)';
+      wctx.fillRect(Math.min(rx, x), H * 0.14 - 1, Math.abs(rx - x), 2);
+    }
+  }
+
+  // Playhead, dead centre.
+  wctx.fillStyle = '#fff';
+  wctx.fillRect(W / 2 - dpr, 0, 2 * dpr, H);
+}
+
+/* ── Export ─────────────────────────────────────────────────────────────── */
+
+$('export').onclick = () => { $('out').textContent = buildLevel(); };
+$('copy').onclick = async () => {
+  const text = $('out').textContent;
+  try { await navigator.clipboard.writeText(text); $('copy').textContent = 'COPIED'; }
+  catch { $('copy').textContent = 'SELECT + COPY'; }
+  setTimeout(() => { $('copy').textContent = 'COPY'; }, 1400);
+};
+
+function buildLevel() {
+  const B = bpm(), O = offset();
+  const id = $('lid').value.trim() || 'mysong';
+  const name = $('lname').value.trim() || 'My Song';
+
+  const sorted = [...notes].sort((a, b) => a.t - b.t);
+  // Chart in BEATS, not seconds. Beats survive a tempo change; seconds don't.
+  const rows = sorted.map((n) => {
+    const beat = (n.t - O) / (60 / B);
+    return `  { beat: ${beat.toFixed(4)}, action: '${n.action}', type: 'tap' },`;
+  }).join('\n');
+
+  const endBeat = sorted.length
+    ? Math.ceil((sorted[sorted.length - 1].t - O) / (60 / B) / 4) * 4 + 4
+    : 32;
+
+  return `/**
+ * ${name}
+ * Generated by tools/chart-lab.html
+ *
+ * BEFORE THIS WILL RUN:
+ *   1. Put your audio in  assets/${id}.wav  (and/or .ogg/.m4a — see docs/AUDIO.md)
+ *   2. Add a \`stage\`, a \`verb\`, and a palette. Copy one of the existing
+ *      levels in src/game/levels/ as a starting point.
+ *   3. Register it in src/game/levels/index.js
+ *   4. Run  npm test  — the design checker will tell you what's missing.
+ *
+ * Every note needs an \`answers\` beat (the call that telegraphs it) or the
+ * telegraph check will reject the chart. If this song IS the telegraph — i.e.
+ * the rhythm is audible in the track itself — point \`answers\` at the beat one
+ * bar earlier and add a matching cue, or relax the rule for this level.
+ */
+
+const BPM = ${B};
+
+const NOTES = [
+${rows}
+];
+
+export default {
+  id: '${id}',
+  name: '${name}',
+  difficulty: 'medium',
+  blurb: 'TODO',
+  verb: 'TODO — one line, what the button does',
+  bpm: BPM,
+  palette: 'grove',        // TODO
+  stage: 'grove',          // TODO
+  tempoMap: [{ beat: 0, bpm: BPM }],
+  sections: [{ beat: 0, name: 'intro', label: null }],
+  endBeat: ${endBeat},
+
+  audio: {
+    src: ['assets/${id}.ogg', 'assets/${id}.m4a', 'assets/${id}.wav'],
+    // Measured leading silence was ${(O * 1000).toFixed(1)}ms. The loader
+    // re-measures the DECODED samples at runtime, so this offset is only the
+    // musical part — how far beat 1 sits AFTER the first audible sample.
+    firstBeat: 0,
+    trimSilence: true,
+    gain: 0.9,
+  },
+
+  // No synthesized backing needed — but you can still add cues here and they
+  // will be scheduled in sample-accurate sync with the recorded track.
+  music: () => [],
+  cues: () => [],
+  chart: () => NOTES.map((n) => ({
+    ...n,
+    answers: n.beat - 4,   // TODO: point at the real telegraph
+    sound: { voice: 'hit', opts: {} },
+  })),
+};
+`;
+}
+</script>
+</body>
+</html>
