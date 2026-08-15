@@ -514,6 +514,53 @@ export const Voices = {
     o.stop(t + dur + 0.1);
   },
 
+  /**
+   * The elephant's stomp — one voice that is two sounds at once.
+   *
+   * A foot the size of a dinner plate hitting dry earth is a broadband THUD,
+   * but a thud alone is unpitched and would sit outside the music. So this
+   * layers a pitched marimba tone on top: the low end sells the weight, the
+   * marimba puts the stomp *in the tune*, and because the player triggers it,
+   * the player is playing the melody.
+   *
+   * They're one voice rather than two scheduled calls because the engine fires
+   * exactly one sound per note, and splitting them risked the two halves
+   * drifting apart by a scheduling quantum — which on a percussive attack is
+   * audible as a flam.
+   */
+  stomp(bus, t, { note = 'C4', gain = 0.34, weight = 1 } = {}) {
+    const ctx = bus.ctx;
+
+    // ── Low thud: a fast pitch drop is what the ear reads as impact.
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120 * weight, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.08);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.85 * weight, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.30);
+    o.connect(g).connect(bus.music);
+    o.start(t); o.stop(t + 0.36);
+
+    // ── Earth: a short burst of low-passed noise. Dry dirt, not a drum skin.
+    const n = ctx.createBufferSource();
+    const lp = ctx.createBiquadFilter();
+    const ng = ctx.createGain();
+    n.buffer = noiseBuffer(ctx);
+    n.playbackRate.value = 0.6 + Math.random() * 0.2;
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(180, t + 0.14);
+    ng.gain.setValueAtTime(0.34 * weight, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
+    n.connect(lp).connect(ng).connect(bus.music);
+    n.start(t); n.stop(t + 0.22);
+
+    // ── Marimba on top, so the stomp is a note.
+    Voices.pluck(bus, t, { note, gain, decay: 0.5 });
+  },
+
   /* ── Feedback SFX ──────────────────────────────────────────────────────── */
 
   /**

@@ -69,6 +69,39 @@ export const PALETTES = {
     accent: '#7ed957',
   },
 
+  /* ── Mango Stomp — a warm retro grove, late afternoon ────────────────────
+     Deliberately a 1970s screen-print: burnt orange, mustard, avocado, cream.
+     Six hues doing all the work, no colour used in only one place. */
+  grove: {
+    name: 'Mango Stomp',
+    skyTop: '#f4b942',
+    skyBot: '#e8825a',
+    sun: '#fff1c9',
+    sunRing: '#ffd166',
+    far: '#c96f4a',
+    mid: '#a8523c',
+    near: '#7d3a2e',
+    ground: '#c98f4a',
+    groundDark: '#a06b34',
+    grass: '#8a9b3c',
+    dust: '#e8c98f',
+    bark: '#6b4226',
+    leaf: '#5c7a2e',
+    leafDark: '#3f5a20',
+    // The elephant
+    hide: '#9aa5b8',
+    hideLight: '#c3cbd9',
+    hideDark: '#6f7a90',
+    ear: '#8f99ac',
+    earInner: '#c99aa0',
+    nail: '#f2e8d5',
+    ink2: '#5a3320',
+    callColor: '#fff1c9',
+    cue: '#ffd166',
+    hot: '#ff9f1c',
+    accent: '#8a9b3c',
+  },
+
   /* ── Rocket Courier — a neon launchpad at night ──────────────────────── */
   pad: {
     name: 'Rocket Courier',

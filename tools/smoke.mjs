@@ -356,7 +356,9 @@ try {
   // lateness that frame-quantized input introduces stays inside the ±32ms
   // perfect window, so the score looks fine and the bug hides. It only shows up
   // where the margins are thin — which is exactly where players notice it.
-  const level = LEVELS[2];
+  // Looked up by id, not index — inserting a level should not silently move
+  // this test onto a slower chart where the effect hides.
+  const level = LEVELS.find((l) => l.id === 'courier');
   const good = runLevel(level, 1.0).result;
   const bad = runLevel(level, 1.0, { frameQuantized: true }).result;
 

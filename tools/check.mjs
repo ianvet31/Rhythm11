@@ -245,6 +245,33 @@ for (const L of LEVELS) {
   ok(active / notes.length > 0.5, 'most notes sit inside a phrase rather than alone',
     `${((active / notes.length) * 100).toFixed(0)}% clustered`);
 
+  /* ── SPATIAL LEGIBILITY ──────────────────────────────────────────────────
+     For a level that draws its rhythm in the world (Mango Stomp hangs it in
+     the trees), the scroll speed converts beats into pixels — so the chart and
+     the art are coupled by one number, and changing either can silently make
+     the notation unreadable.
+
+     Two fruit closer than one diameter merge into a blob; further than the
+     screen is off-camera. Both are checked here so the coupling can't drift. */
+  if (L.scrollPxPerSec) {
+    const R = 13;                     // fruit radius, from the stage
+    const MERGE = R * 1.6;            // below this, two fruit read as one
+    let minPx = Infinity, minPxAt = 0;
+    for (let i = 1; i < times.length; i++) {
+      const px = (times[i].t - times[i - 1].t) * L.scrollPxPerSec;
+      if (px < minPx) { minPx = px; minPxAt = times[i].beat; }
+    }
+    ok(minPx >= MERGE, `closest fruit are ≥${MERGE.toFixed(0)}px apart (still countable)`,
+      `min ${minPx.toFixed(1)}px at beat ${minPxAt}`);
+
+    const lookaheadPx = 960 - 310;    // right edge minus the stomp line
+    const leadPx = L.callLead * (60 / L.bpm) * L.scrollPxPerSec;
+    ok(leadPx <= lookaheadPx,
+      'a cluster is already on screen when its call sounds',
+      `call lead is ${leadPx.toFixed(0)}px but only ${lookaheadPx}px is visible`);
+    console.log(`    scroll ${L.scrollPxPerSec}px/s · ${(L.scrollPxPerSec * 60 / L.bpm).toFixed(0)}px per beat · closest fruit ${minPx.toFixed(0)}px`);
+  }
+
   // Sections must be ordered and inside the song.
   ok(L.sections.every((s, i) => i === 0 || s.beat > L.sections[i - 1].beat), 'sections are ordered');
   ok(L.sections[L.sections.length - 1].beat <= L.endBeat, 'sections end inside the song');

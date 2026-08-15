@@ -1,7 +1,7 @@
 # Rhythm 11
 
-A browser rhythm game in the spirit of *Rhythm Heaven*. Three minigames, three
-quirky little humanoids, three different rhythmic ideas — and **no note highway**.
+A browser rhythm game in the spirit of *Rhythm Heaven*. Four minigames, four
+different rhythmic ideas, and **no note highway**.
 
 No build step, no assets, no dependencies. The music is generated from
 oscillators and the characters are drawn from geometry, so the whole game is
@@ -76,7 +76,37 @@ triplet burst lands, so the hardest rhythmic moment and the biggest visual payof
 are the same moment. Miss it and you get soaked — funnier and more informative
 than a number going down.
 
-### 2. Choir Sprout — 120 BPM, medium
+### 2. Mango Stomp — 108 BPM, easy–medium
+**Tap to stomp.** An elephant walks right through a fruit grove. The fruit hangs
+in the canopy at horizontal positions that *are* the rhythm — the grove scrolls
+at a constant 165 px/s, so distance is literally proportional to time.
+
+```
+quarter notes    ●        ●        ●        ●
+eighths          ●    ●   ●    ●   ●    ●   ●
+a "bunch"        ●        ●●       ●        ●●
+```
+
+Vertical position is randomised and means nothing. That's the point: scattered
+heights look like fruit in a tree instead of a row of buttons, while the only
+axis carrying information stays perfectly clean.
+
+**This level deliberately breaks the house rule above** — the fruit is a
+reliable visual timing cue. That's a considered exception, not a lapse:
+
+- Rocket Courier's visuals are *dishonest*, and punish watching. These are
+  perfectly honest. Both are legitimate; what isn't is honest-*ish*, where
+  watching mostly works and occasionally betrays you.
+- The rhythm is **also** in the music — one bar before every cluster, a marimba
+  plays that cluster's exact figure. The level is fully playable with the screen
+  off. The fruit is a redundant second channel, not a replacement for listening.
+- Redundant cueing is what makes a level approachable. This is the one a person
+  can pick up cold; the other three are not.
+
+The rule survives because it was never "no visual cues" — it was "no visual cue
+the player can't trust".
+
+### 3. Choir Sprout — 120 BPM, medium
 **Tap to sing the next note.** The choirmaster sings a phrase; your sprout sings
 it back. *Which* note is decided by the phrase, so your whole job is *when*.
 
@@ -87,7 +117,7 @@ actively not act while the pulse continues.
 The backing track contains no melody during response bars. The tune only exists
 if you produce it. Miss a note and there's a literal hole in the music.
 
-### 3. Rocket Courier — 150 BPM (+ modulation), hard
+### 4. Rocket Courier — 150 BPM (+ modulation), hard
 **Tap A for yellow, B for pink.** Parcels out of the dark.
 
 This is the sharpest expression of the rule. Each parcel's flight time
@@ -179,6 +209,34 @@ full speed.
 Every character takes a **beat phase**, not a timer. The cast is physically
 incapable of falling out of sync at any tempo, through any tempo change, at any
 frame rate.
+
+### Smoothness is four specific things
+
+Not more frames. `render/beasts.js` is built around them:
+
+1. **Continuity of value *and* slope.** Animation that jumps looks bad;
+   animation whose *speed* jumps looks cheap. The elephant's trunk, head tilt
+   and body lean run through damped springs, which are continuous in position
+   and velocity by construction — and can be re-targeted mid-flight without a
+   discontinuity. That matters because sixteenth pairs re-target the trunk
+   140ms apart, and a tween would visibly restart.
+2. **Overlapping action.** The trunk lags the head, the head lags the body, the
+   ears lag everything, the tail lags most of all. Each part reads the beat with
+   its own offset, so the silhouette is always moving even on a still beat.
+   Everything moving in lockstep reads as a puppet no matter how good the
+   drawing is.
+3. **Anticipation and follow-through.** The stomp rises before it falls, and the
+   body keeps compressing after contact. The impact frame is one or two frames
+   of extreme squash — too brief to consciously see, long enough to feel.
+4. **Volume preservation.** Squash by *k*, stretch by *1/k*. Otherwise "squash"
+   just reads as "the sprite got smaller".
+
+Plus one gameplay-driven cheat: a fruit hanging high and one hanging low take
+exactly the same 0.22s to fall, achieved by solving for the gravity each needs.
+Physically that's wrong, but hang height is randomised purely to look natural —
+if it changed the fall time, the reward for a perfect stomp would arrive at a
+different moment every time. Consistency of feedback beats consistency of
+physics.
 
 ---
 
