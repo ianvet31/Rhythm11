@@ -46,6 +46,37 @@ export class View {
 
   destroy() { window.removeEventListener('resize', this._onResize); }
 
+  /**
+   * Blit a low-resolution indexed Framebuffer (see gfx/raster.js) so it fills
+   * the virtual 960×540 play area.
+   *
+   * Two details matter and both are easy to get wrong:
+   *
+   *   • `imageSmoothingEnabled = false`. Without it the browser bilinearly
+   *     interpolates the upscale and every hard pixel edge turns to mush —
+   *     which destroys the entire point of rendering at 320×180.
+   *   • Draw through an intermediate canvas rather than putImageData directly.
+   *     putImageData ignores the current transform, so it would land in the
+   *     wrong place and at the wrong size the moment the camera shakes.
+   */
+  blitFramebuffer(fb) {
+    if (!this._fbCanvas || this._fbCanvas.width !== fb.w || this._fbCanvas.height !== fb.h) {
+      this._fbCanvas = document.createElement('canvas');
+      this._fbCanvas.width = fb.w;
+      this._fbCanvas.height = fb.h;
+      this._fbCtx = this._fbCanvas.getContext('2d');
+      this._fbImage = this._fbCtx.createImageData(fb.w, fb.h);
+    }
+    fb.toRGBA(this._fbImage.data, 1);
+    this._fbCtx.putImageData(this._fbImage, 0, 0);
+
+    const c = this.ctx;
+    const prev = c.imageSmoothingEnabled;
+    c.imageSmoothingEnabled = false;
+    c.drawImage(this._fbCanvas, 0, 0, VW, VH);
+    c.imageSmoothingEnabled = prev;
+  }
+
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     const availW = window.innerWidth;

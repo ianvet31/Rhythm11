@@ -67,14 +67,15 @@ const BPM = 108;
  * Scroll speed. This single number ties the art to the music: it converts
  * beats into pixels, so it decides how legible the fruit spacing is.
  *
- *   165 px/s ÷ (108/60 beats/s) = 91.7 px per beat
- *      quarter  92px    eighth  46px    sixteenth  23px
+ *   3.05 units/s ÷ (108/60 beats/s) = 1.69 world units per beat
+ *      quarter  1.69u    eighth  0.85u    sixteenth  0.42u
  *
- * With a fruit radius of 13, sixteenths overlap slightly — which is exactly
- * why they're charted as PAIRS and drawn as a bunch. tools/check.mjs enforces
- * the legibility floor so this can't silently regress.
+ * With a fruit radius of 0.24 (diameter 0.48), sixteenths overlap slightly —
+ * which is exactly why they're charted as PAIRS and drawn as a bunch.
+ * tools/check.mjs enforces the legibility floor so this can't silently
+ * regress when the camera or the tempo changes.
  */
-export const SCROLL_PX_PER_SEC = 165;
+export const SCROLL_UNITS_PER_SEC = 3.05;
 
 /* |: F | Dm | Bb | C7 :| — warm, slightly funky, 1970s library music. */
 const BASS_ROOT = ['F1', 'D1', 'A#1', 'C2'];
@@ -289,7 +290,9 @@ export default {
   sections: SECTIONS,
   endBeat: END_BEAT,
   callLead: CALL_LEAD,
-  scrollPxPerSec: SCROLL_PX_PER_SEC,
+  scrollUnitsPerSec: SCROLL_UNITS_PER_SEC,
+  /** Fruit radius in world units — the checker needs it to judge legibility. */
+  fruitRadius: 0.24,
   music,
   chart,
   cues,

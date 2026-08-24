@@ -22,6 +22,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+// Skip the rasterizer's pixel loop — see the note in src/gfx/raster.js. All the
+// geometry, transform and stage logic still runs; only the fill is elided.
+globalThis.__RHYTHM_NO_FILL = true;
+
 const noop = () => {};
 const grad = () => ({ addColorStop: noop });
 
@@ -33,6 +37,9 @@ const mkctx = () => new Proxy({
   setTransform: noop, fillText: noop, strokeText: noop,
   measureText: () => ({ width: 10 }),
   createLinearGradient: grad, createRadialGradient: grad,
+  createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+  putImageData: () => {}, drawImage: () => {},
+  getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
 }, { set: (t, k, v) => { t[k] = v; return true; }, get: (t, k) => t[k] });
 
 const mkEl = () => ({

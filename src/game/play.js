@@ -85,7 +85,10 @@ export class Play {
       cues: this.cues,
       conductor: this.conductor,
       level,
+      // 3D stages need the View to blit their framebuffer through it.
+      view: this.view,
     });
+    this.stage.view = this.view;
 
     this.endTime = this.conductor.beatToTime(level.endBeat) + 2.6;
 

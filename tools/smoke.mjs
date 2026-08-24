@@ -24,6 +24,13 @@
 
 /* ── Stubs ─────────────────────────────────────────────────────────────────── */
 
+// Skip the rasterizer's pixel loop — see the note in src/gfx/raster.js. All the
+// geometry, transform and stage logic still runs; only the fill is elided.
+globalThis.__RHYTHM_NO_FILL = true;
+
+/** Sample the draw path rather than running it every frame. See its use below. */
+const DRAW_EVERY = 6;
+
 const noop = () => {};
 const gradient = () => ({ addColorStop: noop });
 
@@ -41,6 +48,11 @@ function makeCtx2D() {
     measureText: () => ({ width: 42 }),
     createLinearGradient: gradient,
     createRadialGradient: gradient,
+    // A 3D stage blits its indexed framebuffer through an offscreen canvas,
+    // so the stub context needs the image-data path as well as paths.
+    createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    putImageData: noop,
+    getImageData: (x, y, w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
     createPattern: () => null,
     drawImage: noop,
   };
@@ -261,7 +273,21 @@ function runLevel(level, skill, { pauseAt = null, missEvery = 0, frameQuantized 
     if (pauseAt !== null && frames === pauseAt + 30) play.paused = false;
 
     play.update(dt, perfMs);
-    play.draw(perfMs);
+
+    /**
+     * Draw every Nth frame, not every frame.
+     *
+     * `update` runs every frame because that's where judgment, misses and all
+     * the state machines live, and skipping it would change the result. `draw`
+     * is a pure function of that state, so sampling it is enough to prove every
+     * branch executes without throwing.
+     *
+     * This matters since the 3D stages went in: rebuilding a 2,500-triangle
+     * elephant and transforming twenty trees, 22,000 times per run, took the
+     * suite from seconds to minutes. Every sixth frame still exercises the draw
+     * path ~3,700 times per level, which is ample.
+     */
+    if (frames % DRAW_EVERY === 0) play.draw(perfMs);
     frames++;
   }
 

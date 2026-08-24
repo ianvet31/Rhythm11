@@ -257,23 +257,25 @@ for (const L of LEVELS) {
 
      Two fruit closer than one diameter merge into a blob; further than the
      screen is off-camera. Both are checked here so the coupling can't drift. */
-  if (L.scrollPxPerSec) {
-    const R = 13;                     // fruit radius, from the stage
-    const MERGE = R * 1.6;            // below this, two fruit read as one
-    let minPx = Infinity, minPxAt = 0;
+  if (L.scrollUnitsPerSec) {
+    const R = L.fruitRadius;
+    const MERGE = R * 1.65;           // below this, two fruit read as one blob
+    let minU = Infinity, minUAt = 0;
     for (let i = 1; i < times.length; i++) {
-      const px = (times[i].t - times[i - 1].t) * L.scrollPxPerSec;
-      if (px < minPx) { minPx = px; minPxAt = times[i].beat; }
+      const u = (times[i].t - times[i - 1].t) * L.scrollUnitsPerSec;
+      if (u < minU) { minU = u; minUAt = times[i].beat; }
     }
-    ok(minPx >= MERGE, `closest fruit are ≥${MERGE.toFixed(0)}px apart (still countable)`,
-      `min ${minPx.toFixed(1)}px at beat ${minPxAt}`);
+    ok(minU >= MERGE, `closest fruit are ≥${MERGE.toFixed(2)}u apart (still countable)`,
+      `min ${minU.toFixed(2)}u at beat ${minUAt}`);
 
-    const lookaheadPx = 960 - 310;    // right edge minus the stomp line
-    const leadPx = L.callLead * (60 / L.bpm) * L.scrollPxPerSec;
-    ok(leadPx <= lookaheadPx,
+    // How far up the path the camera can actually see. Beyond this a cluster
+    // is off-screen when its call sounds, and the visual telegraph is useless.
+    const VISIBLE_UNITS = 7.5;
+    const leadU = L.callLead * (60 / L.bpm) * L.scrollUnitsPerSec;
+    ok(leadU <= VISIBLE_UNITS,
       'a cluster is already on screen when its call sounds',
-      `call lead is ${leadPx.toFixed(0)}px but only ${lookaheadPx}px is visible`);
-    console.log(`    scroll ${L.scrollPxPerSec}px/s · ${(L.scrollPxPerSec * 60 / L.bpm).toFixed(0)}px per beat · closest fruit ${minPx.toFixed(0)}px`);
+      `call lead is ${leadU.toFixed(1)}u but only ${VISIBLE_UNITS}u is visible`);
+    console.log(`    scroll ${L.scrollUnitsPerSec}u/s · ${(L.scrollUnitsPerSec * 60 / L.bpm).toFixed(2)}u per beat · closest fruit ${minU.toFixed(2)}u`);
   }
 
   // Sections must be ordered and inside the song.

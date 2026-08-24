@@ -11,3 +11,6 @@ assets/*.ogg
 assets/*.m4a
 assets/*.mp3
 assets/*.aiff
+
+# Rendered preview frames — regenerate with tools/shoot.mjs or preview3d.mjs
+shots/
