@@ -561,6 +561,191 @@ export const Voices = {
     Voices.pluck(bus, t, { note, gain, decay: 0.5 });
   },
 
+  /* ── Groove instruments ────────────────────────────────────────────────── */
+
+  /**
+   * Shaker. Distinct from the hi-hat: brighter, shorter, and with a soft
+   * attack rather than a click.
+   *
+   * The soft attack is the whole point. A hat says "here is the sixteenth
+   * grid" — a hard transient the ear counts. A shaker says "here is the
+   * FEEL" — it sits between the grid lines and pushes the groove along. Give
+   * a shaker a hard attack and you just have a thin hat.
+   */
+  shaker(bus, t, { gain = 0.10, decay = 0.05, cut = 7000 } = {}) {
+    const ctx = bus.ctx;
+    const n = ctx.createBufferSource();
+    const hp = ctx.createBiquadFilter();
+    const bp = ctx.createBiquadFilter();
+    const g = ctx.createGain();
+    n.buffer = noiseBuffer(ctx);
+    n.playbackRate.value = 1 + Math.random() * 0.4;
+    hp.type = 'highpass';
+    hp.frequency.value = cut;
+    bp.type = 'bandpass';
+    bp.frequency.value = 9000;
+    bp.Q.value = 0.6;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.008);      // soft attack
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    n.connect(hp).connect(bp).connect(g).connect(bus.music);
+    n.start(t);
+    n.stop(t + decay + 0.04);
+  },
+
+  /** Conga / bongo. Pitched, hand-struck, with a short pitch drop. */
+  conga(bus, t, { note = 'A3', gain = 0.22, decay = 0.24, open = true } = {}) {
+    const ctx = bus.ctx;
+    const f = noteToFreq(note);
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f * 1.35, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
+    const d = open ? decay : decay * 0.35;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(bus.music);
+    g.connect(bus.reverbSend);
+    o.start(t); o.stop(t + d + 0.05);
+
+    // Skin slap: a tiny noise transient. Without it a conga is just a sine.
+    const n = ctx.createBufferSource();
+    const bp = ctx.createBiquadFilter();
+    const ng = ctx.createGain();
+    n.buffer = noiseBuffer(ctx);
+    bp.type = 'bandpass';
+    bp.frequency.value = f * 4;
+    bp.Q.value = 1.2;
+    ng.gain.setValueAtTime(gain * 0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    n.connect(bp).connect(ng).connect(bus.music);
+    n.start(t); n.stop(t + 0.06);
+  },
+
+  /** Woodblock / claves. A dry, pitched tick that cuts through everything. */
+  wood(bus, t, { gain = 0.16, freq = 1400 } = {}) {
+    const ctx = bus.ctx;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    const bp = ctx.createBiquadFilter();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    o.frequency.exponentialRampToValueAtTime(freq * 0.82, t + 0.02);
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = 3;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.045);
+    o.connect(bp).connect(g).connect(bus.music);
+    o.start(t); o.stop(t + 0.07);
+  },
+
+  /**
+   * Electric piano. Two detuned sines an octave apart with a bell-ish attack
+   * partial, plus slow tremolo.
+   *
+   * A real Rhodes is a struck tine picked up magnetically, and what
+   * characterises it is that the ATTACK is much brighter than the sustain —
+   * a bell that immediately becomes a flute. Modelling just that one behaviour
+   * gets you most of the way there for four oscillators.
+   */
+  wurli(bus, t, { note = 'C4', gain = 0.14, dur = 0.5, trem = 4.5 } = {}) {
+    const ctx = bus.ctx;
+    const f = noteToFreq(note);
+    const out = ctx.createGain();
+    out.gain.value = 1;
+
+    // Body: sine + octave
+    for (const [mult, amp, det] of [[1, 1, -3], [2, 0.30, 4], [3, 0.10, 0]]) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f * mult;
+      o.detune.value = det;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain * amp, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(out);
+      o.start(t); o.stop(t + dur + 0.06);
+    }
+    // Bright attack partial — decays ten times faster than the body.
+    const bell = ctx.createOscillator();
+    const bg = ctx.createGain();
+    bell.type = 'sine';
+    bell.frequency.value = f * 6.2;
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.exponentialRampToValueAtTime(gain * 0.22, t + 0.003);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    bell.connect(bg).connect(out);
+    bell.start(t); bell.stop(t + 0.14);
+
+    // Tremolo — the sound of the amp, not the instrument, but inseparable.
+    const lfo = ctx.createOscillator();
+    const lg = ctx.createGain();
+    const trm = ctx.createGain();
+    trm.gain.value = 1;
+    lfo.frequency.value = trem;
+    lg.gain.value = 0.22;
+    lfo.connect(lg).connect(trm.gain);
+    lfo.start(t); lfo.stop(t + dur + 0.1);
+
+    out.connect(trm).connect(bus.music);
+    trm.connect(bus.reverbSend);
+  },
+
+  /**
+   * Brass stab. A short, hard, slightly detuned chord voice for accents.
+   * The pitch scoop up into the note is what says "horn section" — brass
+   * players don't arrive exactly on pitch, they arrive just under it.
+   */
+  horn(bus, t, { notes = ['F3', 'A3', 'C4'], gain = 0.10, dur = 0.22 } = {}) {
+    const ctx = bus.ctx;
+    for (const [i, n] of notes.entries()) {
+      const f = noteToFreq(n);
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      const lp = ctx.createBiquadFilter();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * 0.955, t);
+      o.frequency.exponentialRampToValueAtTime(f, t + 0.035);
+      o.detune.value = (i - 1) * 6;
+      lp.type = 'lowpass';
+      lp.Q.value = 2;
+      lp.frequency.setValueAtTime(f * 2, t);
+      lp.frequency.exponentialRampToValueAtTime(f * 6, t + 0.05);
+      lp.frequency.exponentialRampToValueAtTime(f * 2.5, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.02);
+      g.gain.setValueAtTime(gain * 0.85, t + dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+      o.connect(lp).connect(g).connect(bus.music);
+      g.connect(bus.reverbSend);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  },
+
+  /** Vibraphone / glockenspiel. Pure bell tone for the hook. */
+  vibes(bus, t, { note = 'C5', gain = 0.16, decay = 1.1 } = {}) {
+    const ctx = bus.ctx;
+    const f = noteToFreq(note);
+    // Inharmonic partials are what make a struck METAL bar sound like metal
+    // rather than like a flute; the 4th partial in particular.
+    for (const [mult, amp, dec] of [[1, 1, 1], [4.0, 0.30, 0.42], [9.2, 0.10, 0.20]]) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f * mult;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain * amp, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + decay * dec);
+      o.connect(g).connect(bus.music);
+      g.connect(bus.reverbSend);
+      o.start(t); o.stop(t + decay * dec + 0.08);
+    }
+  },
+
   /* ── Feedback SFX ──────────────────────────────────────────────────────── */
 
   /**

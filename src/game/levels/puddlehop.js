@@ -123,11 +123,37 @@ function music() {
 
   // A soft, ambling groove. Brushed feel — this is a walk in the rain, not a
   // race, and the groove has to leave room for the crow to be heard clearly.
+  /* Variants rotated on a FOUR-BAR phrase.
+     A single fixed pattern repeated for the whole song measures as ~94%
+     identical between consecutive eight-bar blocks, which the arrangement-
+     variety check in tools/check.mjs now rejects. Four bars is the phrase
+     length the ear already groups by, so a change there reads as development
+     rather than as restlessness. */
+  const KICKS = [
+    steps('x.......x.......', 4),
+    steps('x.......x...x...', 4),
+    steps('x.....x.x.......', 4),
+  ];
+  const SNARES = [
+    steps('....x.......x...', 4),
+    steps('....x.......x.o.', 4),
+    steps('....x...o...x...', 4),
+  ];
+  const HATS = [
+    steps('..x...x...x...x.', 4),
+    steps('..x...x...x...xx', 4),
+    steps('..x...xx..x...x.', 4),
+  ];
+
   for (let bar = 2; bar < bars; bar++) {
     const b = bar * 4;
-    drums(ev, 'kick', steps('x.......x.......', 4), b, 4, 1, { gain: 0.85, tune: 1.02 });
-    drums(ev, 'snare', steps('....x.......x...', 4), b, 4, 1, { gain: 0.30, bright: 0.75, decay: 0.14 });
-    drums(ev, 'hat', steps('..x...x...x...x.', 4), b, 4, 1, { gain: 0.11, cut: 7600 });
+    const ph = Math.floor(bar / 4);
+    drums(ev, 'kick', KICKS[ph % KICKS.length], b, 4, 1, { gain: 0.85, tune: 1.02 });
+    drums(ev, 'snare', SNARES[ph % SNARES.length], b, 4, 1, { gain: 0.30, bright: 0.75, decay: 0.14 });
+    drums(ev, 'hat', HATS[ph % HATS.length], b, 4, 1, { gain: 0.11, cut: 7600 });
+    // A shaker layer that comes and goes by phrase — its absence is what makes
+    // its return register.
+    if (ph % 2 === 1) drums(ev, 'shaker', steps('x.x.x.x.x.x.x.x.', 4), b, 4, 1, { gain: 0.045 });
     if (bar % 8 === 7) drums(ev, 'tom', steps('........x...x...', 4), b, 4, 1, { gain: 0.4, freq: 200 });
   }
 

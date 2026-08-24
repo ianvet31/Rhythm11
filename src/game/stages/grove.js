@@ -43,7 +43,7 @@ import { buildElephant } from '../../gfx/elephant3d.js';
 import { Spring } from '../../render/beasts.js';
 import {
   drawSky, buildGrove, buildFruitCanopy, drawFruit, drawStalk, drawShadow,
-  drawDustRing, FRUIT_Y, CANOPY_Y,
+  drawDustRing, drawCracks, FRUIT_Y, CANOPY_Y,
 } from '../../gfx/grove3d.js';
 
 const FB_W = 320;
@@ -55,17 +55,37 @@ const SPEED = 3.05;
 /** She stands here; the world moves instead. */
 const HER_X = 0;
 const HER_Z = 0;
-/** Facing right, yawed toward the camera. */
-const HER_YAW = -0.40;
+/**
+ * Facing right, yawed AWAY from the camera.
+ *
+ * Negative yaw turns her front toward +Z (toward the viewer); this positive
+ * value turns her away, so we see more of her flank and near shoulder. That
+ * three-quarter-from-behind read is what gives the strongest sense of her
+ * walking INTO the scene rather than across a stage.
+ */
+const HER_YAW = -0.15;
 
 /** Fruit sits directly above the stomp point at the instant its note is due. */
 const FRUIT_Z = 0.30;
 
 /**
- * The ground point the player is aiming at — where her front foot lands.
- * Fruit is aligned to project over THIS, in screen space.
+ * Where her stomping foot lands, DERIVED from the yaw rather than typed in.
+ *
+ * The fruit is aligned to project over this point, so if it drifts out of sync
+ * with the model the whole level's timing cue silently lies again — which is
+ * exactly the bug that made this level unplayable. Deriving it means turning
+ * her can never break the alignment; the two are the same number.
+ *
+ * Front-right leg root is [0.62, _, -0.42]; the foot plants ~0.30 further
+ * forward in local space. Rotate that by the yaw.
  */
-const STOMP_POINT = [0.62, 0.05, 0.10];
+const STOMP_POINT = (() => {
+  const lx = 0.62 + 0.30;
+  const lz = -0.42;
+  const c = Math.cos(HER_YAW);
+  const s = Math.sin(HER_YAW);
+  return [c * lx + s * lz, 0.05, -s * lx + c * lz];
+})();
 
 const FALL_TIME = 0.22;
 const KNOCK_DELAY = 0.03;
@@ -209,7 +229,7 @@ export class GroveStage extends Stage {
   draw(c, t) {
     const now = this.animTime;
     const scroll = this.songTime * SPEED;
-    const sway = now * 0.55;
+    const sway = now * (0.55 + this.hype * 0.5);
     const stomp = Stage.since(now, this.stompAt, 0.26);
     const chew = Stage.since(now, this.eatAt, 0.34);
 
@@ -225,15 +245,30 @@ export class GroveStage extends Stage {
        Deliberately NOT tempo-locked; a camera that bounced on the beat would
        compete with the fruit for the player's timing attention. */
     const drift = Math.sin(now * 0.31) * 0.10;
+
+    /* Camera punch on impact.
+       A ~1.5% field-of-view narrowing for a tenth of a second. Deliberately
+       small: the player is reading fruit positions to time their next stomp,
+       and a camera that lurches would move every cue on screen. Big enough to
+       feel, too small to misread. */
+    const punch = Stage.since(now, this.stompAt, 0.13);
+    const fov = Math.PI / 4.4 * (1 - punch * 0.015);
+
+    /* As the combo climbs the camera eases in and drops slightly, which reads
+       as leaning forward. Smoothed hard (`this.hype` is already low-passed) so
+       it never snaps on a single hit. */
+    const push = this.hype * 0.55;
+
     r.setCamera(
-      [-1.2, 3.45 + drift, 8.8],
+      [-1.2 + push * 0.25, 3.45 + drift - push * 0.18, 8.8 - push],
       [1.9, 1.95 + drift * 0.5, 0.0],
-      Math.PI / 4.4,
+      fov,
     );
     r.begin();
 
     buildGrove(r, { scroll, sway, materials: MATERIALS });
-    buildFruitCanopy(r, MATERIALS, scroll, sway);
+    buildFruitCanopy(r, MATERIALS, scroll, sway,
+      Stage.since(now, this.stompAt, 0.42), STOMP_POINT[0]);
 
     // Contact shadow. Squashes on impact, which sells the weight.
     drawShadow(r, MATERIALS, HER_X + 0.1, HER_Z, 1.55 + stomp * 0.35, 1);
@@ -243,6 +278,10 @@ export class GroveStage extends Stage {
     // what makes the hit feel like it had consequences.
     drawDustRing(r, MATERIALS, STOMP_POINT[0], STOMP_POINT[2],
       1 - Stage.since(now, this.stompAt, 0.46), 1);
+    // Cracks outlive the dust, so the impact keeps registering after the
+    // motion has stopped.
+    drawCracks(r, MATERIALS, STOMP_POINT[0], STOMP_POINT[2],
+      Stage.since(now, this.stompAt, 0.62), 1.15);
 
     this._fruit(r, now);
     this._fallers(r, now);

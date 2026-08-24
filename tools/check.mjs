@@ -278,6 +278,55 @@ for (const L of LEVELS) {
     console.log(`    scroll ${L.scrollUnitsPerSec}u/s · ${(L.scrollUnitsPerSec * 60 / L.bpm).toFixed(2)}u per beat · closest fruit ${minU.toFixed(2)}u`);
   }
 
+  /* ── ARRANGEMENT VARIETY ─────────────────────────────────────────────────
+     "The song is kinda boring" is a real bug report, and it turns out to be
+     measurable. Take each eight-bar block and ask how much of it is identical
+     — same voice, same offset within the block — to the next eight bars.
+
+     The first version of Mango Stomp scored 90% between consecutive blocks: a
+     four-bar chord loop with one drum pattern, repeated for two minutes. The
+     ear notices that long before it can say why.
+
+     This is a floor, not a target. A song CAN be too varied; the check only
+     catches the specific failure of a loop that never develops. Note it
+     compares structure, not audio, so it can't tell you the music is GOOD —
+     only that it isn't literally repeating itself. */
+  {
+    const blockBeats = 32;
+    const sigOf = (from) => {
+      const s = new Set();
+      for (const e of music) {
+        if (e.beat >= from && e.beat < from + blockBeats) {
+          s.add(`${e.voice}@${(e.beat - from).toFixed(2)}`);
+        }
+      }
+      return s;
+    };
+    let worstSim = 0;
+    let worstAt = 0;
+    let blocks = 0;
+    for (let from = 16; from + blockBeats * 2 <= L.endBeat; from += blockBeats) {
+      const a = sigOf(from);
+      const b2 = sigOf(from + blockBeats);
+      if (a.size < 8 || b2.size < 8) continue;
+      let inter = 0;
+      for (const k of a) if (b2.has(k)) inter++;
+      const union = new Set([...a, ...b2]).size;
+      const sim = inter / union;
+      blocks++;
+      if (sim > worstSim) { worstSim = sim; worstAt = from; }
+    }
+    if (blocks > 0) {
+      ok(worstSim <= 0.85,
+        'no eight-bar block is a near-copy of the next (≤85% identical)',
+        `worst ${(worstSim * 100).toFixed(0)}% at beat ${worstAt}`);
+      const voices = new Set(music.map((e) => e.voice));
+      ok(voices.size >= 5, 'the arrangement uses at least five distinct voices',
+        `uses ${[...voices].join(', ')}`);
+      console.log(`    arrangement: ${voices.size} voices · worst block repeat ${(worstSim * 100).toFixed(0)}%`);
+    }
+  }
+
   // Sections must be ordered and inside the song.
   ok(L.sections.every((s, i) => i === 0 || s.beat > L.sections[i - 1].beat), 'sections are ordered');
   ok(L.sections[L.sections.length - 1].beat <= L.endBeat, 'sections end inside the song');

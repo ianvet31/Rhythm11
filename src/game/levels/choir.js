@@ -131,8 +131,18 @@ function music() {
   // and the harmony steady while two voices trade a tune over the top.
   for (let bar = 2; bar < bars; bar++) {
     const b = bar * 4;
-    drums(ev, 'kick', steps('x.......x.......', 4), b, 4, 1, { gain: 0.7, tune: 1.05 });
-    drums(ev, 'hat', steps('....x.......x...', 4), b, 4, 1, { gain: 0.12, cut: 8600 });
+    // Rotated per four-bar phrase; see the arrangement-variety note in
+    // tools/check.mjs for why a single fixed pattern is a measurable fault.
+    const ph = Math.floor(bar / 4);
+    const KICKS = [
+      steps('x.......x.......', 4),
+      steps('x.......x...x...', 4),
+      steps('x.....x.x.......', 4),
+    ];
+    drums(ev, 'kick', KICKS[ph % KICKS.length], b, 4, 1, { gain: 0.7, tune: 1.05 });
+    drums(ev, 'hat', steps(ph % 2 ? '....x...x...x...' : '....x.......x...', 4),
+      b, 4, 1, { gain: 0.12, cut: 8600 });
+    if (ph % 3 !== 0) drums(ev, 'shaker', steps('..x...x...x...x.', 4), b, 4, 1, { gain: 0.05 });
     // A soft clap on 2 and 4 from bar 8 — the choir stamping along.
     if (bar >= 8) drums(ev, 'clap', steps('....x.......x...', 4), b, 4, 1, { gain: 0.16 });
   }

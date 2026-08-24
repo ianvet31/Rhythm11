@@ -43,7 +43,15 @@ const FB_W = 320;
 const FB_H = 180;
 const SPEED = 3.05;
 const FRUIT_Z = 0.30;
-const STOMP_POINT = [0.62, 0.05, 0.10];
+const HER_YAW = -0.15;
+// Derived exactly as the stage derives it — see src/game/stages/grove.js.
+const STOMP_POINT = (() => {
+  const lx = 0.62 + 0.30;
+  const lz = -0.42;
+  const c = Math.cos(HER_YAW);
+  const s = Math.sin(HER_YAW);
+  return [c * lx + s * lz, 0.05, -s * lx + c * lz];
+})();
 const CAMERA_EYE = [-1.2, 3.45, 8.8];
 const CAMERA_AT = [1.9, 1.95, 0.0];
 const CAMERA_FOV = Math.PI / 4.4;
@@ -129,6 +137,9 @@ const grab = (name) => {
 ok(Number(grab('SPEED')) === SPEED, 'stage SPEED matches the value under test', `stage has ${grab('SPEED')}`);
 ok(Number(grab('FRUIT_Z')) === FRUIT_Z, 'stage FRUIT_Z matches', `stage has ${grab('FRUIT_Z')}`);
 ok(src.includes('alignFruitX'), 'the stage actually performs the alignment solve');
+ok(Number((/const HER_YAW = ([^;]+);/.exec(src) || [])[1]) === HER_YAW,
+  'stage yaw matches the value under test — the stomp point is derived from it,'
+  + ' so a mismatch means the fruit is aligned to the wrong foot');
 ok(/setCamera\(\s*\[-1\.2/.test(src.replace(/\s+/g, ' ')) || src.includes('-1.2'),
   'stage camera eye X matches the value under test');
 

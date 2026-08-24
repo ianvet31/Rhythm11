@@ -188,9 +188,18 @@ function music() {
       drums(ev, 'snare', steps('....x.......x...', 4), b, 4, 1, { gain: 0.5, tone: 150 });
       drums(ev, 'hat', steps('..x...x...x...x.', 4), b, 4, 1, { gain: 0.12, open: true });
     } else {
-      drums(ev, 'kick', steps('x.....x.x.......', 4), b, 4, 1, { gain: 1.0, tune: 0.98 });
-      drums(ev, 'snare', steps('....x.......x...', 4), b, 4, 1, { gain: 0.5, bright: 1.1 });
-      drums(ev, 'hat', steps('x.x.x.x.x.x.x.x.', 4), b, 4, 1, { gain: 0.13, cut: 9500 });
+      // Rotated per four-bar phrase; see tools/check.mjs on arrangement variety.
+      const ph = Math.floor(bar / 4);
+      const KICKS = [
+        steps('x.....x.x.......', 4),
+        steps('x.....x.x...x...', 4),
+        steps('x...x...x.....x.', 4),
+      ];
+      drums(ev, 'kick', KICKS[ph % KICKS.length], b, 4, 1, { gain: 1.0, tune: 0.98 });
+      drums(ev, 'snare', steps(ph % 2 ? '....x......ox..o' : '....x.......x...', 4),
+        b, 4, 1, { gain: 0.5, bright: 1.1 });
+      drums(ev, 'hat', steps(ph % 3 === 1 ? 'x.xxx.x.x.xxx.x.' : 'x.x.x.x.x.x.x.x.', 4),
+        b, 4, 1, { gain: 0.13, cut: 9500 });
       if (bar % 8 === 7) drums(ev, 'tom', steps('........x.x.x.x.', 4), b, 4, 1, { gain: 0.45, freq: 250 });
     }
   }

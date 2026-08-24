@@ -144,7 +144,8 @@ export function buildElephant(pose = {}) {
     const root = LEG_ROOT[i];
     const isStomping = front && i === 1;
 
-    const leg = buildLeg(ph, front, walking, isStomping ? hit : 0);
+    const leg = buildLeg(ph, front, walking,
+      isStomping ? hit : 0, isStomping ? recoil : 0);
     // root[1] matters: legs hang FROM the shoulder, not from the origin.
     // Dropping it detaches them from the body entirely.
     // Legs take a fraction of the body's lean: the shoulders move with the
@@ -180,7 +181,11 @@ export function buildElephant(pose = {}) {
      Placed forward and slightly down from the withers. The dome is a separate
      spheroid ON TOP of the skull, which is the read that says "elephant".      */
   const headBase = [1.42, bodyY + 0.30, 0];
-  const hn = headNod + Math.sin(walkPhase * Math.PI * 2 + 0.6) * 0.03 * walking;
+  // Head snaps DOWN into the stomp then rebounds — a whip that lags the body,
+  // which is what makes a heavy animal feel connected rather than rigid.
+  const hn = headNod
+    + Math.sin(walkPhase * Math.PI * 2 + 0.6) * 0.03 * walking
+    + hit * 0.16 - recoil * 0.20;
   const headRig = (v) => {
     // Yaw then pitch about the head's own origin, then translate into place.
     let [x, y, z] = v;
@@ -207,7 +212,11 @@ export function buildElephant(pose = {}) {
   /* ── Ears ───────────────────────────────────────────────────────────────
      Huge, thin, angled out and back. Built as a squashed spheroid so they have
      a little thickness — a flat quad would vanish edge-on and pop.            */
-  const flap = earFlap * 0.45 + Math.sin(walkPhase * Math.PI * 2 - 0.9) * 0.12 * walking;
+  // Ears fling outward on impact and settle after — the biggest, floppiest,
+  // laggiest thing on the animal, so it carries the follow-through.
+  const flap = earFlap * 0.45
+    + Math.sin(walkPhase * Math.PI * 2 - 0.9) * 0.12 * walking
+    + recoil * 0.55 + hit * 0.20;
   for (const side of [1, -1]) {
     /**
      * The ear is a large thin fan. Built thin in Z so its broad faces already
@@ -424,7 +433,7 @@ function rollOnly(v, roll) {
  *
  * @param {number} ph  0..1 through this leg's own cycle. 0 = footfall.
  */
-function buildLeg(ph, front, walking, stompAmt) {
+function buildLeg(ph, front, walking, stompAmt, recoilAmt = 0) {
   const M = emptyMesh();
 
   /* Gait split: roughly 60% of the cycle is STANCE (foot planted, body moving
@@ -445,38 +454,69 @@ function buildLeg(ph, front, walking, stompAmt) {
     footY = Math.sin(t * Math.PI) * 0.30 * walking;
   }
 
-  footY += stompAmt * -0.05;
-
-  const len = front ? 1.30 : 1.26;
+  let len = front ? 1.30 : 1.26;
   const knee = front ? 0.42 : 0.46;
+  let splay = 1;
 
-  // Path from hip to foot with a subtle forward knee.
+  /* ── THE STOMP ──────────────────────────────────────────────────────────
+     The player triggers this, so there can be no anticipation — she cannot
+     wind up for a beat she doesn't know is coming. What sells it instead is
+     the SNAP: the foot is blended from wherever the walk happened to leave it
+     straight to a hard planted pose, over a single frame.
+
+     Because the walk raises this foot for roughly 40% of every cycle, most
+     stomps catch it mid-air, and the blend reads as the foot being driven
+     down. When it catches the foot already planted, the extra leg extension
+     below still reads as a shove. Either way it lands.
+
+     Three things happen together and none of them is optional:
+       • the foot snaps forward and to the ground
+       • the leg EXTENDS, driving the body upward off it — this is what makes
+         it a stomp rather than a crouch
+       • the foot splays wider, so the silhouette widens on impact           */
+  if (stompAmt > 0) {
+    const s = stompAmt;
+    footX = lerp(footX, 0.30, s);
+    footY = lerp(footY, -0.10, s);
+    len += s * 0.16;
+    splay = 1 + s * 0.22;
+  }
+  // Recoil: the leg unloads and the foot lifts slightly as she pushes back up.
+  footY += recoilAmt * 0.09;
+  len -= recoilAmt * 0.07;
+
+  // Path from hip to foot with a subtle forward knee. The knee STRAIGHTENS on
+  // impact — a bent leg absorbs force, a straight one transmits it, and the eye
+  // knows the difference even if it can't name it.
   const path = [];
   const radii = [];
   const N = 5;
+  const bendScale = 1 - stompAmt * 0.75;
   for (let i = 0; i < N; i++) {
     const t = i / (N - 1);
-    const bendAmt = Math.sin(t * Math.PI) * knee * 0.22;
+    const bendAmt = Math.sin(t * Math.PI) * knee * 0.22 * bendScale;
     path.push([
       lerp(0, footX, t * t) + bendAmt * (front ? 1 : -1),
       -t * len + footY * t * t,
       0,
     ]);
-    // Thick at the shoulder, narrowing to the ankle, then the foot flares.
-    radii.push(lerp(0.30, 0.19, t));
+    // Thick at the shoulder, narrowing to the ankle. Bulges on impact, as a
+    // real limb does under load.
+    radii.push(lerp(0.30, 0.19, t) * (1 + stompAmt * 0.10 * Math.sin(t * Math.PI)));
   }
   merge(M, tube(path, radii, front ? 'hide' : 'hideDark', 6));
 
   // Foot: a flattened cylinder, wider than the ankle.
   const f = path[N - 1];
-  merge(M, spheroid(0.26, 0.13, 0.25, front ? 'hide' : 'hideDark', 7, 4),
-    place(f[0], f[1] - 0.06, f[2]));
+  merge(M, spheroid(0.26 * splay, 0.13 / splay, 0.25 * splay,
+    front ? 'hide' : 'hideDark', 7, 4),
+  place(f[0], f[1] - 0.06, f[2]));
 
   // Toenails — three small pale nubs on the front face. Tiny, but they're the
   // detail that reads as "elephant foot" rather than "post".
   for (const d of [-1, 0, 1]) {
     merge(M, spheroid(0.055, 0.035, 0.05, 'tusk', 4, 3),
-      place(f[0] + 0.19, f[1] - 0.04, f[2] + d * 0.115));
+      place(f[0] + 0.19 * splay, f[1] - 0.04, f[2] + d * 0.115 * splay));
   }
 
   return M;

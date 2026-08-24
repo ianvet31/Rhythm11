@@ -256,6 +256,42 @@ export function drawDustRing(r, materials, x, z, t, power = 1) {
   ), materials);
 }
 
+/**
+ * Ground cracks radiating from an impact.
+ *
+ * Short-lived, but they persist a beat longer than the dust — so the eye sees
+ * consequence AFTER the cause, which is what makes an impact feel like it
+ * damaged the world rather than just made a puff. Five spokes at fixed angles,
+ * because randomising them per stomp makes a rhythm game's feedback feel
+ * inconsistent, and consistency is the whole point of feedback here.
+ */
+const CRACK_ANGLES = [0.3, 1.5, 2.6, 3.7, 5.1];
+const CRACK = (() => {
+  const M = emptyMesh();
+  for (const a of CRACK_ANGLES) {
+    const c = Math.cos(a); const s = Math.sin(a);
+    // A long thin wedge lying flat.
+    const verts = [
+      [c * 0.18 - s * 0.05, 0, s * 0.18 + c * 0.05],
+      [c * 0.18 + s * 0.05, 0, s * 0.18 - c * 0.05],
+      [c * 1.0, 0, s * 1.0],
+    ];
+    merge(M, { verts, faces: [[0, 2, 1, 'shadow']] });
+  }
+  return M;
+})();
+
+/** @param {number} t 0 = fresh, 1 = gone */
+export function drawCracks(r, materials, x, z, t, scale = 1) {
+  if (t <= 0 || t >= 1) return;
+  // Cracks snap to full length instantly — they're a fracture, not a growth —
+  // then fade.
+  r.mesh(CRACK, m4mul(
+    m4translate(x, 0.025, z),
+    m4scale(scale * (0.7 + t * 0.5), 1, scale * (0.7 + t * 0.5) * 0.6),
+  ), materials);
+}
+
 /** A soft contact shadow disc, laid flat just above the ground. */
 const SHADOW = (() => {
   const verts = [[0, 0, 0]];
@@ -391,7 +427,7 @@ export function buildGrove(r, { scroll = 0, sway = 0, materials }) {
  *
  * Built per-frame from a scrolling index so it tiles seamlessly forever.
  */
-export function buildFruitCanopy(r, materials, scroll, sway = 0) {
+export function buildFruitCanopy(r, materials, scroll, sway = 0, shake = 0, shakeX = 0) {
   const SP = 1.5;
   const first = Math.floor(scroll / SP) - 2;
   for (let i = first; i < first + 26; i++) {
@@ -402,8 +438,14 @@ export function buildFruitCanopy(r, materials, scroll, sway = 0) {
     // reads as a leafy roof rather than a flat ceiling.
     for (let k = 0; k < 3; k++) {
       const z = -2.3 + k * 1.55 + (n2 - 0.5) * 0.6;
+      /* Localised shake: the canopy jolts hardest directly above the impact
+         and falls off with distance, so a stomp visibly disturbs THAT part of
+         the tree rather than the whole grove wobbling in sympathy. */
+      const dist = Math.abs(x - shakeX);
+      const local = shake * Math.max(0, 1 - dist / 3.2);
       const y = CANOPY_Y + (k === 1 ? 0.30 : 0) + (n - 0.5) * 0.55
-        + Math.sin(sway + i * 0.8) * 0.05;
+        + Math.sin(sway + i * 0.8) * 0.05
+        - local * 0.22 * Math.sin(local * 26 + i);
       const s = 0.78 + n * 0.42 - k * 0.06;
       const shaded = k === 0 || n < 0.34;
       r.mesh(
