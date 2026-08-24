@@ -11,6 +11,7 @@
     "smoke": "node tools/smoke.mjs",
     "build": "node tools/build.mjs",
     "lab": "npx --yes serve -l 3000 . && echo open http://localhost:3000/tools/chart-lab.html",
-    "test": "node tools/check.mjs && node tools/smoke.mjs && node tools/build.mjs && node tools/bundle-boot.mjs"
+    "test": "node tools/check.mjs && node tools/align-check.mjs && node tools/midi-check.mjs && node tools/smoke.mjs && node tools/build.mjs && node tools/bundle-boot.mjs",
+    "shots": "node tools/preview3d.mjs scene && node tools/shoot.mjs grove 24,52"
   }
 }

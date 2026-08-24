@@ -85,34 +85,54 @@ export function buildElephant(pose = {}) {
      twice, so the dominant term is 2×. */
   const bob = (Math.sin(walkPhase * Math.PI * 4) * 0.035
     + Math.sin(walkPhase * Math.PI * 2) * 0.02) * walking;
-  const squash = 1 + stomp * 0.16;
-  const bodyY = 1.62 + bob - stomp * 0.14;
+
+  /* ── The stomp ──────────────────────────────────────────────────────────
+     `stomp` arrives as a linear 1→0 decay, which on its own reads as a limp
+     fade. Reshaping it is what makes the hit land:
+
+       squash   pow(s, 0.35)   rises almost instantly, releases slowly —
+                               so the compression is at its most extreme on the
+                               very first frame, where the eye reads impact
+       recoil   sin(π·s)·s     a secondary bounce as she pushes back up,
+                               peaking after the squash rather than with it
+
+     Staggering the two is the whole trick. Squash and recovery on the same
+     curve is a rubber ball; offset, it's a heavy body absorbing a landing. */
+  const hit = Math.pow(clamp(stomp, 0, 1), 0.35);
+  const recoil = Math.sin(Math.PI * stomp) * stomp;
+
+  const squash = 1 + hit * 0.17 - recoil * 0.07;
+  const bodyY = 1.62 + bob - hit * 0.17 + recoil * 0.09;
 
   // Slight roll as weight transfers side to side. Small — 3 degrees — but it's
-  // the difference between walking and sliding.
-  const roll = Math.sin(walkPhase * Math.PI * 2) * 0.05 * walking;
+  // the difference between walking and sliding. The stomp adds a lurch onto
+  // the stomping side.
+  const roll = Math.sin(walkPhase * Math.PI * 2) * 0.05 * walking - hit * 0.05;
+
+  // She pitches forward into the stomp and rocks back out of it.
+  const pitch = hit * 0.055 - recoil * 0.035;
 
   /* ── Torso ──────────────────────────────────────────────────────────────
      Two overlapping spheroids: a deep chest and a rounder rump, with the chest
      set slightly higher. That's what produces the shallow S-curve back line;
      one spheroid gives you a loaf of bread. */
   const chest = spheroid(0.80, 0.66, 0.66, 'hide', 12, 8);
-  merge(M, chest, (v) => bodyRig(v, 0.40, bodyY + 0.04, 0, squash, roll));
+  merge(M, chest, (v) => bodyRig(v, 0.40, bodyY + 0.04, 0, squash, roll, pitch));
 
   const rump = spheroid(0.74, 0.62, 0.64, 'hide', 12, 8);
-  merge(M, rump, (v) => bodyRig(v, -0.66, bodyY - 0.04, 0, squash, roll));
+  merge(M, rump, (v) => bodyRig(v, -0.66, bodyY - 0.04, 0, squash, roll, pitch));
 
   // Belly filler so the two masses read as one animal.
   const belly = spheroid(0.78, 0.46, 0.58, 'hideDark', 10, 6);
-  merge(M, belly, (v) => bodyRig(v, -0.14, bodyY - 0.30, 0, squash, roll));
+  merge(M, belly, (v) => bodyRig(v, -0.14, bodyY - 0.30, 0, squash, roll, pitch));
 
   // Withers hump — the high point just behind the neck.
   const withers = spheroid(0.36, 0.22, 0.48, 'hide', 8, 5);
-  merge(M, withers, (v) => bodyRig(v, 0.44, bodyY + 0.52, 0, squash, roll));
+  merge(M, withers, (v) => bodyRig(v, 0.44, bodyY + 0.52, 0, squash, roll, pitch));
 
   // Neck: bridges body to head so they don't read as two separate balls.
   const neck = spheroid(0.34, 0.40, 0.44, 'hide', 8, 5);
-  merge(M, neck, (v) => bodyRig(v, 1.02, bodyY + 0.34, 0, squash, roll));
+  merge(M, neck, (v) => bodyRig(v, 1.02, bodyY + 0.34, 0, squash, roll, pitch));
 
   /* ── Legs ───────────────────────────────────────────────────────────────
      Columnar, thick, with a slight knee bend. Elephant legs are near-vertical
@@ -122,14 +142,17 @@ export function buildElephant(pose = {}) {
     const front = i < 2;
     const ph = (walkPhase + LEG_PHASE[i]) % 1;
     const root = LEG_ROOT[i];
-    const isStomping = front && i === 1 && stomp > 0;
+    const isStomping = front && i === 1;
 
-    const leg = buildLeg(ph, front, walking, isStomping ? stomp : 0);
+    const leg = buildLeg(ph, front, walking, isStomping ? hit : 0);
     // root[1] matters: legs hang FROM the shoulder, not from the origin.
     // Dropping it detaches them from the body entirely.
+    // Legs take a fraction of the body's lean: the shoulders move with the
+    // torso, the feet stay planted. Giving them the full rotation would slide
+    // her feet through the ground on every stomp.
     merge(M, leg, (v) => bodyRig(
       [v[0] + root[0], v[1] + root[1] + bob * 0.6, v[2] + root[2]],
-      0, 0, 0, 1, roll * 0.4,
+      0, 0, 0, 1, roll * 0.4, pitch * 0.35,
     ));
   }
 
@@ -165,17 +188,21 @@ export function buildElephant(pose = {}) {
     [x, z] = [x * cy + z * sy, -x * sy + z * cy];
     const cp = Math.cos(hn); const sp = Math.sin(hn);
     [x, y] = [x * cp - y * sp, x * sp + y * cp];
-    return bodyRig([x + headBase[0], y + headBase[1], z + headBase[2]], 0, 0, 0, 1, roll);
+    return bodyRig([x + headBase[0], y + headBase[1], z + headBase[2]], 0, 0, 0, 1, roll, pitch);
   };
 
-  // Skull
-  merge(M, spheroid(0.42, 0.42, 0.42, 'hide', 10, 7), (v) => headRig(v));
-  // The dome — the forehead rising above the eyes. THE elephant read.
-  merge(M, spheroid(0.34, 0.32, 0.38, 'hide', 9, 6),
-    (v) => headRig([v[0] - 0.02, v[1] + 0.34, v[2]]));
-  // Cheeks / jaw mass, set forward and down.
-  merge(M, spheroid(0.30, 0.26, 0.36, 'hide', 8, 5),
-    (v) => headRig([v[0] + 0.20, v[1] - 0.26, v[2]]));
+  /* Friendliness is proportion, not expression.
+     A bigger head relative to the body, a higher rounder dome, and fuller
+     cheeks all read as juvenile — the same neotenic cues that make any animal
+     look approachable. The previous head was anatomically closer to an adult
+     African elephant and correspondingly severe. */
+  merge(M, spheroid(0.50, 0.48, 0.48, 'hide', 11, 8), (v) => headRig(v));
+  // The dome — rounder and taller than life, which is most of the charm.
+  merge(M, spheroid(0.42, 0.40, 0.44, 'hide', 10, 7),
+    (v) => headRig([v[0] - 0.03, v[1] + 0.34, v[2]]));
+  // Full round cheeks.
+  merge(M, spheroid(0.34, 0.31, 0.42, 'hide', 9, 6),
+    (v) => headRig([v[0] + 0.18, v[1] - 0.26, v[2]]));
 
   /* ── Ears ───────────────────────────────────────────────────────────────
      Huge, thin, angled out and back. Built as a squashed spheroid so they have
@@ -204,9 +231,11 @@ export function buildElephant(pose = {}) {
         // Raked well BACK so the fan extends behind the skull into open sky.
         // An ear that only sticks out sideways is hidden by the head from a
         // three-quarter view, which is the angle the game actually uses.
-        (x * cy + z * sy) - 0.30,
-        y + 0.06,
-        (-x * sy + z * cy) + side * 0.52,
+        // Set well BACK from the eye. The skull grew when she was made
+        // friendlier, and at the old offset the ear fan covered her face.
+        (x * cy + z * sy) - 0.46,
+        y + 0.08,
+        (-x * sy + z * cy) + side * 0.56,
       ]);
     };
     // Outer ear — its own ramp so it separates from the skull. See palette32.
@@ -225,31 +254,63 @@ export function buildElephant(pose = {}) {
   /* ── Eyes ───────────────────────────────────────────────────────────────
      Small and set LOW and FORWARD on the skull, just above the trunk root.
      Putting them centre-face is what made the old 2D version cyclopean.       */
+  /* Eyes: bigger, rounder, and set slightly further apart and lower.
+     Large eyes low on a tall skull is the single strongest "friendly" signal
+     available; the previous pair were small, high and close together, which
+     reads as watchful. A white catchlight sphere on the upper-left of each
+     pupil costs almost nothing and makes them look alive rather than painted. */
   const eyeOpen = 1 - blink;
   for (const side of [1, -1]) {
-    merge(M, spheroid(0.052, 0.052 * eyeOpen + 0.008, 0.052, 'eyeWhite', 6, 4),
-      (v) => headRig([v[0] + 0.30, v[1] - 0.04, v[2] + side * 0.29]));
-    merge(M, spheroid(0.030, 0.030 * eyeOpen + 0.006, 0.030, 'eye', 5, 4),
-      (v) => headRig([v[0] + 0.34, v[1] - 0.04, v[2] + side * 0.30]));
-    // Brow ridge — a small hide-coloured bar above the eye. Costs 30 triangles
-    // and does more for expression than the eye itself.
-    merge(M, spheroid(0.09, 0.035, 0.07, 'hide', 5, 3),
-      (v) => headRig([v[0] + 0.29, v[1] + 0.06, v[2] + side * 0.29]));
+    // The dark pupil has to dominate: a big white sclera with a small pupil
+    // reads as a startled cartoon, and at 320x180 it just reads as a white
+    // blob. Pupil large, sclera a thin rim around it.
+    merge(M, spheroid(0.088, 0.088 * eyeOpen + 0.010, 0.088, 'eyeWhite', 7, 5),
+      (v) => headRig([v[0] + 0.30, v[1] - 0.06, v[2] + side * 0.33]));
+    merge(M, spheroid(0.068, 0.068 * eyeOpen + 0.008, 0.068, 'eye', 6, 5),
+      (v) => headRig([v[0] + 0.35, v[1] - 0.06, v[2] + side * 0.345]));
+    if (eyeOpen > 0.4) {
+      merge(M, spheroid(0.024, 0.024, 0.024, 'eyeWhite', 4, 3),
+        (v) => headRig([v[0] + 0.39, v[1] - 0.015, v[2] + side * 0.315]));
+    }
+    // A soft brow. Angled slightly UP toward the outside, which is a raised,
+    // open expression rather than a furrowed one.
+    merge(M, spheroid(0.11, 0.038, 0.08, 'hide', 5, 3),
+      (v) => headRig([v[0] + 0.30, v[1] + 0.09 + side * 0.005, v[2] + side * 0.31]));
+    // Round cheek blush, in the warm ear tone.
+    merge(M, spheroid(0.10, 0.075, 0.05, 'ear', 6, 4),
+      (v) => headRig([v[0] + 0.28, v[1] - 0.24, v[2] + side * 0.34]));
+  }
+
+  /* A smile. Two short tapered tubes curving UP at the corners, tucked under
+     the trunk root. Tiny, mostly hidden at this resolution, and it changes the
+     whole face — the difference between an animal that tolerates you and one
+     that's pleased to see you. */
+  for (const side of [1, -1]) {
+    const sm = [];
+    const smR = [];
+    for (let k = 0; k <= 3; k++) {
+      const t = k / 3;
+      sm.push([0.42 - t * 0.04, -0.40 + t * t * 0.07, side * t * 0.17]);
+      smR.push(lerp(0.028, 0.016, t));
+    }
+    merge(M, tube(sm, smR, 'eye', 4, false), (v) => headRig(v));
   }
 
   /* ── Tusks ──────────────────────────────────────────────────────────────
      Short and curving forward and slightly out. Small, so she reads young. */
+  // Short, blunt and turned UP at the tips. Long forward-pointing tusks read
+  // as weaponry; stubby upturned ones read as a young animal.
   for (const side of [1, -1]) {
     const tuskPath = [];
     const tuskR = [];
     for (let i = 0; i <= 3; i++) {
       const t = i / 3;
       tuskPath.push([
-        0.48 + t * 0.42,
-        -0.32 - t * 0.30 + t * t * 0.16,
-        side * (0.20 + t * 0.10),
+        0.50 + t * 0.26,
+        -0.34 - t * 0.16 + t * t * 0.20,
+        side * (0.20 + t * 0.07),
       ]);
-      tuskR.push(lerp(0.075, 0.022, t));
+      tuskR.push(lerp(0.070, 0.030, t));
     }
     merge(M, tube(tuskPath, tuskR, 'tusk', 5), (v) => headRig(v));
   }
@@ -309,18 +370,45 @@ export function buildElephant(pose = {}) {
   return M;
 }
 
-/** Apply body squash and roll, then translate. */
-function bodyRig(v, tx, ty, tz, squash, roll) {
+/**
+ * Apply body squash, roll and pitch, then translate.
+ *
+ * Squash is volume-preserving: compressing vertically by k expands horizontally
+ * by k. Skip that and "squash" just reads as "the model got shorter", which is
+ * the most common tell of amateur cartoon animation.
+ */
+function bodyRig(v, tx, ty, tz, squash, roll, pitch = 0) {
   let [x, y, z] = v;
   x += tx; y += ty; z += tz;
+
+  // Squash about the ground plane, so she compresses down onto her feet.
   if (squash !== 1) {
     y *= 1 / squash;
     x *= squash;
     z *= squash;
   }
+
+  /**
+   * Pitch and roll about the BODY, not the world origin.
+   *
+   * Rotating about (0,0,0) — which sits on the ground, a metre below and
+   * behind her mass — turns a small rotation into a large translation, and the
+   * body visibly tears away from the legs. Rotating about a pivot inside the
+   * torso is what makes it read as the animal leaning.
+   */
+  const PX = 0.15;
+  const PY = 1.45;
+  if (pitch) {
+    const c = Math.cos(pitch); const s = Math.sin(pitch);
+    const dx = x - PX; const dy = y - PY;
+    x = PX + dx * c - dy * s;
+    y = PY + dx * s + dy * c;
+  }
   if (roll) {
     const c = Math.cos(roll); const s = Math.sin(roll);
-    [y, z] = [y * c - z * s, y * s + z * c];
+    const dy = y - PY;
+    y = PY + dy * c - z * s;
+    z = dy * s + z * c;
   }
   return [x, y, z];
 }

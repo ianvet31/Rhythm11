@@ -35,6 +35,8 @@
  */
 
 import { Voices } from '../audio/synth.js';
+import { Sequencer } from '../audio/sequencer.js';
+import { calibrationSong } from '../audio/song.js';
 
 const WARMUP_TAPS = 4;
 const NEEDED_TAPS = 16;
@@ -51,36 +53,37 @@ export class Calibrator {
     this.secPerBeat = 60 / CAL_BPM;
     this.taps = [];
     this.running = false;
-    this._timer = null;
     this.onUpdate = null;
+
+    /**
+     * The click track is an ordinary Song played by the ordinary Sequencer.
+     *
+     * This used to be a bespoke setInterval loop scheduling its own clicks —
+     * which meant the code MEASURING your latency was not the code that would
+     * later USE that measurement. Two implementations of the same idea can
+     * disagree, and if they do, calibration silently makes gameplay worse
+     * instead of better.
+     *
+     * Sharing the machinery makes that class of bug impossible: if the click is
+     * where the player expects, so is every note in every level.
+     */
+    this.song = calibrationSong(CAL_BPM);
+    this.sequencer = new Sequencer(bus, conductor);
+    this.sequencer.load(this.song.synthEvents());
   }
 
   start() {
     this.taps = [];
     this.running = true;
-    this.conductor.setTempoMap([{ beat: 0, bpm: CAL_BPM }]);
+    this.conductor.setTempoMap(this.song.tempoMap);
     this.startCtx = this.conductor.start(0.7);
-    this._nextBeat = 0;
-    this._tick();
-    this._timer = setInterval(() => this._tick(), 25);
+    this.sequencer.start(this.startCtx);
   }
 
   stop() {
     this.running = false;
-    if (this._timer) clearInterval(this._timer);
-    this._timer = null;
+    this.sequencer.stop();
     this.conductor.stop();
-  }
-
-  _tick() {
-    const horizon = this.bus.ctx.currentTime + 0.3;
-    while (this.startCtx + this._nextBeat * this.secPerBeat < horizon) {
-      const when = this.startCtx + this._nextBeat * this.secPerBeat;
-      const downbeat = this._nextBeat % 4 === 0;
-      Voices.hat(this.bus, when, { gain: downbeat ? 0.5 : 0.28, cut: downbeat ? 6000 : 9500 });
-      if (downbeat) Voices.kick(this.bus, when, { gain: 0.7 });
-      this._nextBeat++;
-    }
   }
 
   /** @param {number} perfMs event.timeStamp */

@@ -43,7 +43,7 @@ import { buildElephant } from '../../gfx/elephant3d.js';
 import { Spring } from '../../render/beasts.js';
 import {
   drawSky, buildGrove, buildFruitCanopy, drawFruit, drawStalk, drawShadow,
-  FRUIT_Y, CANOPY_Y,
+  drawDustRing, FRUIT_Y, CANOPY_Y,
 } from '../../gfx/grove3d.js';
 
 const FB_W = 320;
@@ -58,8 +58,14 @@ const HER_Z = 0;
 /** Facing right, yawed toward the camera. */
 const HER_YAW = -0.40;
 
-/** Fruit sits directly above her head at the instant its note is due. */
+/** Fruit sits directly above the stomp point at the instant its note is due. */
 const FRUIT_Z = 0.30;
+
+/**
+ * The ground point the player is aiming at — where her front foot lands.
+ * Fruit is aligned to project over THIS, in screen space.
+ */
+const STOMP_POINT = [0.62, 0.05, 0.10];
 
 const FALL_TIME = 0.22;
 const KNOCK_DELAY = 0.03;
@@ -117,7 +123,7 @@ export class GroveStage extends Stage {
     // happened" and "one thing caused another".
     this.fallers.push({
       t0: this.animTime + KNOCK_DELAY,
-      x0: 0, y0: note._hangY, z0: FRUIT_Z,
+      x0: this.alignFruitX(note._hangY), y0: note._hangY, z0: FRUIT_Z,
       kind: note.kind, spin: note._spin,
       dur: FALL_TIME, finale: !!note.finale,
     });
@@ -131,6 +137,45 @@ export class GroveStage extends Stage {
     const p = this.r.project([HER_X + 0.6, 2.5, HER_Z]);
     if (!p) return { x: VW * 0.35, y: VH * 0.45 };
     return { x: (p.x / FB_W) * VW, y: (p.y / FB_H) * VH };
+  }
+
+  /**
+   * ── THE ALIGNMENT SOLVE ──────────────────────────────────────────────────
+   *
+   * Solve for the world X at which a fruit hanging at height `y` projects to
+   * the same SCREEN X as the stomp point on the ground.
+   *
+   * This is not a nicety, it was a game-breaking bug. The fruit is the level's
+   * timing cue and it hangs ~3 units above the ground. The camera is off-axis
+   * and tilted down, so a point at height 2.95 and the ground point directly
+   * below it do NOT share a screen X — the perspective divide differs because
+   * raising a point under a tilted camera also moves it along the view axis.
+   *
+   * Measured on the shipped camera: the fruit crossed the stomp point 108ms
+   * BEFORE its note was due. That is wider than the entire ±110ms judgment
+   * window, so a player following the fruit was guaranteed to be early, and no
+   * calibration setting could rescue it — calibration shifts audio judgment
+   * uniformly, it cannot fix a visual that lies.
+   *
+   * Aligning in world space is the intuitive thing to do and it is wrong. The
+   * player judges in screen space, so the solve has to happen there.
+   *
+   * Newton's method on the projection, which is near-linear in x at fixed y,z —
+   * three iterations converge to well under a pixel.
+   */
+  alignFruitX(y) {
+    const target = this.r.project(STOMP_POINT);
+    if (!target) return 0;
+    let x = 0;
+    for (let i = 0; i < 3; i++) {
+      const p0 = this.r.project([x, y, FRUIT_Z]);
+      const p1 = this.r.project([x + 0.5, y, FRUIT_Z]);
+      if (!p0 || !p1) break;
+      const slope = (p1.x - p0.x) / 0.5;
+      if (Math.abs(slope) < 1e-6) break;
+      x += (target.x - p0.x) / slope;
+    }
+    return x;
   }
 
   /* ── Update ────────────────────────────────────────────────────────────── */
@@ -193,6 +238,12 @@ export class GroveStage extends Stage {
     // Contact shadow. Squashes on impact, which sells the weight.
     drawShadow(r, MATERIALS, HER_X + 0.1, HER_Z, 1.55 + stomp * 0.35, 1);
 
+    // Shockwave from the stomping foot. Longer-lived than the body's squash,
+    // so the impact keeps radiating after she has already recovered — which is
+    // what makes the hit feel like it had consequences.
+    drawDustRing(r, MATERIALS, STOMP_POINT[0], STOMP_POINT[2],
+      1 - Stage.since(now, this.stompAt, 0.46), 1);
+
     this._fruit(r, now);
     this._fallers(r, now);
 
@@ -244,10 +295,13 @@ export class GroveStage extends Stage {
       const dt = n.time - this.songTime;
       if (dt < -0.4 || dt > 7.5) continue;
 
-      const x = dt * SPEED;
+      // The bob is applied to the DRAWN height only, and the alignment solve
+      // uses the un-bobbed height. Otherwise the idle wobble would smear the
+      // timing cue by a few milliseconds each frame.
       const bob = Math.sin(now * 1.5 + n.hangSeed) * 0.03
         + shiver * Math.sin(now * 40) * 0.05;
       const y = n._hangY + bob;
+      const x = dt * SPEED + this.alignFruitX(n._hangY);
 
       drawStalk(r, MATERIALS, x, y, FRUIT_Z, CANOPY_Y - y);
       drawFruit(r, MATERIALS, x, y, FRUIT_Z, n.kind, 1, n._spin + now * 0.25);

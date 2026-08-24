@@ -210,6 +210,52 @@ const GROUND = groundGrid(140, 90, 70, 30, (c, r2) => {
   // belongs on small objects where the eye expects detail.
 });
 
+/**
+ * The stomp shockwave — an expanding ring of dust on the ground.
+ *
+ * ── Why a ring and not a puff ────────────────────────────────────────────────
+ *
+ * A puff of dust says "something moved". A ring travelling OUTWARD from a point
+ * says "something hit the ground there, hard" — it gives the impact a location
+ * and a direction, and its expansion rate is read as force.
+ *
+ * Expansion is eased out hard (t^0.45): almost all the growth happens in the
+ * first few frames, then it drifts. Linear expansion reads as a balloon
+ * inflating; front-loaded expansion reads as a blast.
+ *
+ * Built as a flat annulus lying on the ground, so perspective foreshortens it
+ * into an ellipse automatically. A screen-space circle would sit wrong the
+ * moment the camera moved.
+ */
+const DUST_RING = (() => {
+  const verts = [];
+  const faces = [];
+  const N = 16;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    verts.push([Math.cos(a) * 0.62, 0, Math.sin(a) * 0.62]);   // inner
+    verts.push([Math.cos(a) * 1.0, 0.12, Math.sin(a) * 1.0]);  // outer, lifted
+  }
+  for (let i = 0; i < N; i++) {
+    const a = i * 2; const b = i * 2 + 1;
+    const c = ((i + 1) % N) * 2; const d = ((i + 1) % N) * 2 + 1;
+    faces.push([a, d, b, 'dust']);
+    faces.push([a, c, d, 'dust']);
+  }
+  return { verts, faces };
+})();
+
+/** @param {number} t 0 = just struck, 1 = gone */
+export function drawDustRing(r, materials, x, z, t, power = 1) {
+  if (t <= 0 || t >= 1) return;
+  const rad = Math.pow(t, 0.45) * 3.1 * power;
+  const lift = t * 0.5;
+  r.mesh(DUST_RING, m4mul(
+    m4translate(x, 0.03 + lift, z),
+    m4scale(rad, 1 - t * 0.5, rad * 0.85),
+  ), materials);
+}
+
 /** A soft contact shadow disc, laid flat just above the ground. */
 const SHADOW = (() => {
   const verts = [[0, 0, 0]];

@@ -118,6 +118,8 @@ export const RAMPS = {
   grass: [16, 17, 18, 19, 19],
   /** Contact shadow — a single dark tone, never dithered. */
   shadow: [25, 25, 25, 25, 25],
+  /** Kicked-up dust. Light and warm so it reads against the ground. */
+  dust: [27, 28, 28, 30, 30],
 
   mango: [22, 29, 29, 30, 30],
   mangoRipe: [26, 29, 30, 30, 31],
